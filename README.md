@@ -8,6 +8,8 @@
   <img src="https://img.shields.io/badge/IaC-wrangler-2ea44f?style=flat-square"/>
 </p>
 
+<p align="center"><b>🌐 English</b> · <a href="README.es.md">Español</a></p>
+
 ---
 
 ## What it is
