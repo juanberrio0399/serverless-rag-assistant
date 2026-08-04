@@ -92,6 +92,38 @@ async function handleAsk(request, env) {
   });
 }
 
+const INDEX_HTML = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Serverless RAG Assistant</title>
+<style>
+:root{--bg:#0a0e1a;--card:#111a2e;--line:#22314f;--txt:#e6edf7;--mut:#8aa0c2;--acc:#22d3ee}
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,Segoe UI,sans-serif;background:var(--bg);color:var(--txt);display:flex;min-height:100vh;align-items:center;justify-content:center;padding:24px}
+.card{max-width:640px;width:100%;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:28px}
+.top{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:6px}
+h1{font-size:22px;margin:6px 0 4px}.sub{color:var(--mut);font-size:14px;margin:0 0 18px}
+.lang button{background:none;border:1px solid var(--line);color:var(--mut);border-radius:8px;padding:4px 9px;cursor:pointer;font-weight:600;font-size:12px}
+.lang button.on{background:var(--acc);color:#06101f;border-color:var(--acc)}
+textarea{width:100%;background:#0a1526;border:1px solid var(--line);color:var(--txt);border-radius:10px;padding:12px;font-size:15px;resize:vertical;min-height:64px}
+button.ask{margin-top:10px;background:var(--acc);color:#06101f;border:none;border-radius:10px;padding:11px 18px;font-weight:700;cursor:pointer;font-size:15px}
+.out{margin-top:16px;background:#0a1526;border:1px solid var(--line);border-radius:10px;padding:14px;min-height:46px;font-size:15px;white-space:pre-wrap}
+.foot{margin-top:18px;color:var(--mut);font-size:13px}.foot a{color:var(--acc)}
+.tag{display:inline-block;font-size:11px;color:var(--acc);border:1px solid var(--line);border-radius:20px;padding:3px 10px}
+</style></head><body>
+<div class="card">
+  <div class="top">
+    <span class="tag">Cloudflare Workers AI + Vectorize</span>
+    <span class="lang"><button id="bEN" class="on" onclick="L('en')">EN</button><button id="bES" onclick="L('es')">ES</button></span>
+  </div>
+  <h1>Serverless RAG Assistant</h1>
+  <p class="sub" data-en="Ask a question and the AI answers grounded in the ingested documents. 100% serverless on Cloudflare, ~$0 infrastructure." data-es="Haz una pregunta y la IA responde con base en los documentos cargados. 100% serverless en Cloudflare, ~$0 de infraestructura.">Ask a question and the AI answers grounded in the ingested documents. 100% serverless on Cloudflare, ~$0 infrastructure.</p>
+  <textarea id="q">How many records does DataForge process?</textarea>
+  <button class="ask" onclick="ask()" data-en="Ask" data-es="Preguntar">Ask</button>
+  <div class="out" id="out" data-en="The answer will appear here." data-es="La respuesta aparecerá aquí.">The answer will appear here.</div>
+  <p class="foot"><span data-en="Demo API. Source code:" data-es="API demo. Código fuente:">Demo API. Source code:</span> <a href="https://github.com/juanberrio0399/serverless-rag-assistant" target="_blank">github.com/juanberrio0399/serverless-rag-assistant</a></p>
+</div>
+<script>
+function L(l){document.documentElement.lang=l;document.querySelectorAll('[data-en]').forEach(function(e){var v=e.getAttribute('data-'+l);if(v)e.textContent=v});document.getElementById('bEN').classList.toggle('on',l==='en');document.getElementById('bES').classList.toggle('on',l==='es')}
+async function ask(){var q=document.getElementById('q').value.trim(),o=document.getElementById('out');if(!q)return;o.textContent='...';try{var r=await fetch('/ask',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({question:q})});var d=await r.json();o.textContent=(d.answer||d.error||'-')+(d.sources&&d.sources.length?'   ['+d.sources.join(', ')+']':'')}catch(e){o.textContent='Error: '+e.message}}
+</script></body></html>`;
+
 export default {
   async fetch(request, env) {
    try {
@@ -104,14 +136,7 @@ export default {
       return await handleAsk(request, env);
     }
 
-    return json({
-      name: "Serverless RAG Assistant",
-      description: "RAG over your documents, 100% serverless on Cloudflare.",
-      endpoints: {
-        "POST /ingest": "{ text, source } — add a document",
-        "POST /ask": "{ question } — ask grounded in your documents",
-      },
-    });
+    return new Response(INDEX_HTML, { headers: { "content-type": "text/html; charset=utf-8" } });
    } catch (e) {
     return json({ error: e?.message || String(e) }, 500);
    }
