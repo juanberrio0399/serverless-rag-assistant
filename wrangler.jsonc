@@ -1,0 +1,19 @@
+{
+  // ---- Infraestructura como código (IaC) ----
+  // Este archivo DECLARA toda la infra del proyecto. Cambiarlo = cambiar la nube.
+  "$schema": "node_modules/wrangler/config-schema.json",
+
+  "name": "serverless-rag-assistant",   // nombre del Worker en tu cuenta
+  "main": "src/index.js",               // el código que corre
+  "compatibility_date": "2026-08-01",   // "congela" el comportamiento del runtime
+
+  // Binding a Workers AI → dentro del código lo usas como env.AI
+  "ai": { "binding": "AI" },
+
+  // Binding a la base vectorial (Vectorize) → env.VECTORIZE
+  "vectorize": [
+    { "binding": "VECTORIZE", "index_name": "rag-index" }
+  ]
+
+  // (Más adelante agregamos R2 aquí para guardar los documentos originales.)
+}
