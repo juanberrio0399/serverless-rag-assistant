@@ -6,7 +6,7 @@
 //   POST /ask      → { question }      : retrieve relevant chunks → LLM answer  (Module 4)
 
 const EMBED_MODEL = "@cf/baai/bge-base-en-v1.5";      // 768-dim embeddings
-const LLM_MODEL = "@cf/meta/llama-3.1-8b-instruct";   // answering model
+const LLM_MODEL = "@cf/meta/llama-3.2-3b-instruct";   // answering model (current, multilingual)
 const CHUNK_SIZE = 800;                                // characters per chunk
 
 // Split raw text into fixed-size chunks (small enough for good retrieval).
@@ -94,13 +94,14 @@ async function handleAsk(request, env) {
 
 export default {
   async fetch(request, env) {
+   try {
     const url = new URL(request.url);
 
     if (request.method === "POST" && url.pathname === "/ingest") {
-      return handleIngest(request, env);
+      return await handleIngest(request, env);
     }
     if (request.method === "POST" && url.pathname === "/ask") {
-      return handleAsk(request, env);
+      return await handleAsk(request, env);
     }
 
     return json({
@@ -111,5 +112,8 @@ export default {
         "POST /ask": "{ question } — ask grounded in your documents",
       },
     });
+   } catch (e) {
+    return json({ error: e?.message || String(e) }, 500);
+   }
   },
 };

@@ -37,9 +37,27 @@ Docs →  chunk → embeddings → Vectorize   |  question → embedding → Vec
 
 `Cloudflare Workers` · `Workers AI` · `Vectorize` · `R2` · `RAG` · `LLM integration` · `embeddings` · `Infrastructure as Code (wrangler)` · `serverless` · `CI/CD`
 
-## Status
+## Live demo
 
-🚧 In progress — built step by step. See commits for the build log.
+🟢 **Live:** https://serverless-rag-assistant.tienvo.workers.dev
+
+```bash
+# 1) Teach it a document
+curl -X POST https://serverless-rag-assistant.tienvo.workers.dev/ingest \
+  -H "content-type: application/json" \
+  -d '{"text":"Your document text here...","source":"my-doc"}'
+
+# 2) Ask (grounded in your docs — wait ~10s after ingesting)
+curl -X POST https://serverless-rag-assistant.tienvo.workers.dev/ask \
+  -H "content-type: application/json" \
+  -d '{"question":"..."}'
+```
+
+**Highlights:**
+- **Anti-hallucination** — replies "I don't know" when the answer isn't in your documents (prompt-engineered guardrail).
+- **Multilingual** — answers in the language you ask.
+- **Source tracking** — every answer returns which document it came from, plus similarity scores.
+- **~$0 infrastructure** — serverless, no server or database to host.
 
 ---
 
