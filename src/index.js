@@ -53,6 +53,45 @@ async function handleIngest(request, env) {
   });
 }
 
+// POST /ask  — answer a question grounded ONLY in the ingested documents
+async function handleAsk(request, env) {
+  const { question, topK = 5 } = await request.json().catch(() => ({}));
+  if (!question) return json({ error: "Missing 'question' in body." }, 400);
+
+  // 1) Embed the question with the SAME model used at ingestion
+  const { data } = await env.AI.run(EMBED_MODEL, { text: [question] });
+
+  // 2) Retrieve the most similar chunks (semantic search)
+  const results = await env.VECTORIZE.query(data[0], { topK, returnMetadata: "all" });
+  const matches = results.matches ?? [];
+  if (matches.length === 0) {
+    return json({ answer: "No documents ingested yet — add some with /ingest first.", sources: [] });
+  }
+
+  // 3) Build the context block from the retrieved chunks
+  const context = matches.map((m, i) => `[${i + 1}] ${m.metadata.text}`).join("\n\n");
+
+  // 4) Prompt engineering: force the model to answer ONLY from the context
+  const messages = [
+    {
+      role: "system",
+      content:
+        "You are a helpful assistant. Answer the question using ONLY the context provided. " +
+        "If the answer is not in the context, say you don't know — never make anything up. " +
+        "Be concise and reply in the same language as the question.",
+    },
+    { role: "user", content: `Context:\n${context}\n\nQuestion: ${question}` },
+  ];
+
+  const ai = await env.AI.run(LLM_MODEL, { messages });
+
+  return json({
+    answer: ai.response,
+    sources: [...new Set(matches.map((m) => m.metadata.source))],
+    matches: matches.map((m) => ({ score: m.score, source: m.metadata.source })),
+  });
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -61,7 +100,7 @@ export default {
       return handleIngest(request, env);
     }
     if (request.method === "POST" && url.pathname === "/ask") {
-      return json({ error: "Coming in Module 4 🙂" }, 501);
+      return handleAsk(request, env);
     }
 
     return json({
