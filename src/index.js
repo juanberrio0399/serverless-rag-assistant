@@ -94,34 +94,46 @@ async function handleAsk(request, env) {
 
 const INDEX_HTML = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Serverless RAG Assistant</title>
 <style>
-:root{--bg:#0a0e1a;--card:#111a2e;--line:#22314f;--txt:#e6edf7;--mut:#8aa0c2;--acc:#22d3ee}
-*{box-sizing:border-box}body{margin:0;font-family:system-ui,Segoe UI,sans-serif;background:var(--bg);color:var(--txt);display:flex;min-height:100vh;align-items:center;justify-content:center;padding:24px}
-.card{max-width:640px;width:100%;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:28px}
-.top{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:6px}
-h1{font-size:22px;margin:6px 0 4px}.sub{color:var(--mut);font-size:14px;margin:0 0 18px}
-.lang button{background:none;border:1px solid var(--line);color:var(--mut);border-radius:8px;padding:4px 9px;cursor:pointer;font-weight:600;font-size:12px}
-.lang button.on{background:var(--acc);color:#06101f;border-color:var(--acc)}
-textarea{width:100%;background:#0a1526;border:1px solid var(--line);color:var(--txt);border-radius:10px;padding:12px;font-size:15px;resize:vertical;min-height:64px}
-button.ask{margin-top:10px;background:var(--acc);color:#06101f;border:none;border-radius:10px;padding:11px 18px;font-weight:700;cursor:pointer;font-size:15px}
-.out{margin-top:16px;background:#0a1526;border:1px solid var(--line);border-radius:10px;padding:14px;min-height:46px;font-size:15px;white-space:pre-wrap}
-.foot{margin-top:18px;color:var(--mut);font-size:13px}.foot a{color:var(--acc)}
-.tag{display:inline-block;font-size:11px;color:var(--acc);border:1px solid var(--line);border-radius:20px;padding:3px 10px}
+:root{--bg:#f5f7fa;--card:#ffffff;--ink:#0f172a;--body:#334155;--mut:#64748b;--line:#e6eaf0;--acc:#1d4ed8;--soft:#eef3ff}
+*{box-sizing:border-box}
+body{margin:0;font-family:"Segoe UI",system-ui,Arial,sans-serif;background:var(--bg);color:var(--body);display:flex;min-height:100vh;align-items:center;justify-content:center;padding:24px;line-height:1.6}
+.card{max-width:680px;width:100%;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:34px;box-shadow:0 12px 44px -22px rgba(15,23,42,.20)}
+.top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.eyebrow{font-size:11.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--acc)}
+h1{font-size:24px;color:var(--ink);margin:6px 0}
+.sub{color:var(--mut);font-size:15px;margin:0 0 22px}
+.lang button{background:#fff;border:1px solid var(--line);color:var(--mut);border-radius:8px;padding:5px 10px;cursor:pointer;font-weight:600;font-size:12px}
+.lang button.on{background:var(--acc);color:#fff;border-color:var(--acc)}
+.label{font-size:13.5px;font-weight:600;color:var(--ink);margin:0 0 9px}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px}
+.chip{font-size:13px;background:var(--soft);border:1px solid #dbe4ff;color:var(--acc);padding:6px 12px;border-radius:8px;cursor:pointer;transition:background .15s}
+.chip:hover{background:#e0e9ff}
+textarea{width:100%;background:#fff;border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:12px;font-size:15px;resize:vertical;min-height:58px;font-family:inherit}
+button.ask{margin-top:10px;background:var(--acc);color:#fff;border:none;border-radius:10px;padding:11px 22px;font-weight:600;cursor:pointer;font-size:15px}
+button.ask:hover{background:#1843b8}
+.out{margin-top:16px;background:#f8fafc;border:1px solid var(--line);border-radius:10px;padding:15px;min-height:46px;font-size:15px;color:var(--ink);white-space:pre-wrap}
+.foot{margin-top:20px;padding-top:15px;border-top:1px solid var(--line);color:var(--mut);font-size:13px}
+.foot a{color:var(--acc);text-decoration:none}
 </style></head><body>
 <div class="card">
   <div class="top">
-    <span class="tag">Cloudflare Workers AI + Vectorize</span>
+    <div><div class="eyebrow">Cloud &amp; Data Engineering</div><h1>Serverless RAG Assistant</h1></div>
     <span class="lang"><button id="bEN" class="on" onclick="L('en')">EN</button><button id="bES" onclick="L('es')">ES</button></span>
   </div>
-  <h1>Serverless RAG Assistant</h1>
-  <p class="sub" data-en="Ask a question and the AI answers grounded in the ingested documents. 100% serverless on Cloudflare, ~$0 infrastructure." data-es="Haz una pregunta y la IA responde con base en los documentos cargados. 100% serverless en Cloudflare, ~$0 de infraestructura.">Ask a question and the AI answers grounded in the ingested documents. 100% serverless on Cloudflare, ~$0 infrastructure.</p>
-  <textarea id="q">How many records does DataForge process?</textarea>
-  <button class="ask" onclick="ask()" data-en="Ask" data-es="Preguntar">Ask</button>
-  <div class="out" id="out" data-en="The answer will appear here." data-es="La respuesta aparecerá aquí.">The answer will appear here.</div>
-  <p class="foot"><span data-en="Demo API. Source code:" data-es="API demo. Código fuente:">Demo API. Source code:</span> <a href="https://github.com/juanberrio0399/serverless-rag-assistant" target="_blank">github.com/juanberrio0399/serverless-rag-assistant</a></p>
+  <p class="sub" data-en="An AI service that answers questions using only the information in the loaded documents, deployed on serverless cloud infrastructure (Cloudflare). It does not invent: if the answer is not in the sources, it says so." data-es="Un servicio de IA que responde preguntas usando unicamente la informacion de los documentos cargados, desplegado sobre infraestructura cloud serverless (Cloudflare). No inventa: si la respuesta no esta en las fuentes, lo indica.">An AI service that answers questions using only the information in the loaded documents, deployed on serverless cloud infrastructure (Cloudflare). It does not invent: if the answer is not in the sources, it says so.</p>
+  <p class="label" data-en="This demo is preloaded with a short profile. Select an example question:" data-es="Esta demostracion trae cargado un perfil breve. Selecciona una pregunta de ejemplo:">This demo is preloaded with a short profile. Select an example question:</p>
+  <div class="chips" id="chips"></div>
+  <textarea id="q"></textarea>
+  <button class="ask" onclick="ask()" data-en="Get answer" data-es="Obtener respuesta">Get answer</button>
+  <div class="out" id="out" data-en="The answer will appear here, with its source document." data-es="La respuesta aparecera aqui, con su documento fuente.">The answer will appear here, with its source document.</div>
+  <p class="foot"><span data-en="Designed and built by Juan Berrio, Cloud &amp; Data Engineer. Source code:" data-es="Disenado y construido por Juan Berrio, Cloud &amp; Data Engineer. Codigo fuente:">Designed and built by Juan Berrio, Cloud &amp; Data Engineer. Source code:</span> <a href="https://github.com/juanberrio0399/serverless-rag-assistant" target="_blank">GitHub</a></p>
 </div>
 <script>
-function L(l){document.documentElement.lang=l;document.querySelectorAll('[data-en]').forEach(function(e){var v=e.getAttribute('data-'+l);if(v)e.textContent=v});document.getElementById('bEN').classList.toggle('on',l==='en');document.getElementById('bES').classList.toggle('on',l==='es')}
-async function ask(){var q=document.getElementById('q').value.trim(),o=document.getElementById('out');if(!q)return;o.textContent='...';try{var r=await fetch('/ask',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({question:q})});var d=await r.json();o.textContent=(d.answer||d.error||'-')+(d.sources&&d.sources.length?'   ['+d.sources.join(', ')+']':'')}catch(e){o.textContent='Error: '+e.message}}
+var EX={en:["How many records does DataForge process?","What technologies does DataForge use?","How often does DataForge run?"],es:["Cuantos registros procesa DataForge?","Que tecnologias usa DataForge?","Cada cuanto se ejecuta DataForge?"]};
+function chips(l){var c=document.getElementById("chips");c.innerHTML="";EX[l].forEach(function(t){var b=document.createElement("span");b.className="chip";b.textContent=t;b.onclick=function(){document.getElementById("q").value=t};c.appendChild(b)})}
+function L(l){document.documentElement.lang=l;document.querySelectorAll("[data-en]").forEach(function(e){var v=e.getAttribute("data-"+l);if(v)e.textContent=v});document.getElementById("bEN").classList.toggle("on",l==="en");document.getElementById("bES").classList.toggle("on",l==="es");chips(l);document.getElementById("q").value=EX[l][0]}
+async function ask(){var q=document.getElementById("q").value.trim(),o=document.getElementById("out");if(!q)return;o.textContent="...";try{var r=await fetch("/ask",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({question:q})});var d=await r.json();o.textContent=(d.answer||d.error||"-")+(d.sources&&d.sources.length?"   ["+d.sources.join(", ")+"]":"")}catch(e){o.textContent="Error: "+e.message}}
+L("en");
 </script></body></html>`;
 
 export default {
