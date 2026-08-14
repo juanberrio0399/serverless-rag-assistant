@@ -79,3 +79,6 @@ curl -X POST https://serverless-rag-assistant.tienvo.workers.dev/ask \
 
 
 > Built by **Juan Berrio** — Cloud &amp; Data Engineer. Portfolio: [juanberrio0399.github.io](https://juanberrio0399.github.io)
+
+## License
+This project is licensed under the Apache-2.0 License. Any reuse of this code must retain the copyright notice and attribution to Juan Berrio. See the [LICENSE](./LICENSE) file for details.
