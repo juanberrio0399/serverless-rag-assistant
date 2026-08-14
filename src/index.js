@@ -28,6 +28,12 @@ function json(data, status = 200) {
 
 // POST /ingest  — teach the assistant a document
 async function handleIngest(request, env) {
+  const authHeader = request.headers.get("Authorization");
+  const expectedToken = env.INGEST_TOKEN;
+  if (!expectedToken || authHeader !== `Bearer ${expectedToken}`) {
+    return json({ error: "Unauthorized. Provide a valid 'Authorization: Bearer <token>' header." }, 401);
+  }
+
   const { text, source = "manual" } = await request.json().catch(() => ({}));
   if (!text) return json({ error: "Missing 'text' in body." }, 400);
 
@@ -55,6 +61,14 @@ async function handleIngest(request, env) {
 
 // POST /ask  — answer a question grounded ONLY in the ingested documents
 async function handleAsk(request, env) {
+  if (env.RATE_LIMITER) {
+    const ip = request.headers.get("cf-connecting-ip") || "unknown";
+    const { success } = await env.RATE_LIMITER.limit({ key: ip });
+    if (!success) {
+      return json({ error: "Rate limit exceeded. Please try again later." }, 429);
+    }
+  }
+
   const { question, topK = 5 } = await request.json().catch(() => ({}));
   if (!question) return json({ error: "Missing 'question' in body." }, 400);
 

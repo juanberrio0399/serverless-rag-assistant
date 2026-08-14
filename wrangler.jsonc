@@ -13,7 +13,14 @@
   // Binding a la base vectorial (Vectorize) → env.VECTORIZE
   "vectorize": [
     { "binding": "VECTORIZE", "index_name": "rag-index" }
-  ]
+  ],
 
-  // (Más adelante agregamos R2 aquí para guardar los documentos originales.)
+  // Binding a Rate Limiting → env.RATE_LIMITER
+  "ratelimits": [
+    {
+      "binding": "RATE_LIMITER",
+      "namespace_id": "1001",
+      "simple": { "limit": 10, "period": 60 }
+    }
+  ]
 }
