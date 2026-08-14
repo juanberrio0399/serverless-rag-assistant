@@ -12,6 +12,9 @@
 
 ---
 
+> 💡 **Repository Discoverability**: Configured with GitHub topics (`rag`, `cloudflare-workers`, `workers-ai`, `vectorize`, `llm`, `serverless`, `r2`, `ai`), a live demo link in the About section, and a custom social preview image (`assets/social-preview.png`).
+
+
 ## What it is
 
 A **RAG** (Retrieval-Augmented Generation) service: it retrieves the most relevant pieces of your documents and lets an LLM answer **based on them** — instead of guessing. Built as a demonstration of **deploying and operating AI on cloud infrastructure**.
@@ -29,7 +32,16 @@ Docs →  chunk → embeddings → Vectorize   |  question → embedding → Vec
 ```
 
 | Piece | Cloudflare service | Role |
-|---|---|---|
+|---
+
+> 💡 **Repository Discoverability**: Configured with GitHub topics (`rag`, `cloudflare-workers`, `workers-ai`, `vectorize`, `llm`, `serverless`, `r2`, `ai`), a live demo link in the About section, and a custom social preview image (`assets/social-preview.png`).
+|---
+
+> 💡 **Repository Discoverability**: Configured with GitHub topics (`rag`, `cloudflare-workers`, `workers-ai`, `vectorize`, `llm`, `serverless`, `r2`, `ai`), a live demo link in the About section, and a custom social preview image (`assets/social-preview.png`).
+|---
+
+> 💡 **Repository Discoverability**: Configured with GitHub topics (`rag`, `cloudflare-workers`, `workers-ai`, `vectorize`, `llm`, `serverless`, `r2`, `ai`), a live demo link in the About section, and a custom social preview image (`assets/social-preview.png`).
+|
 | API / brain | **Worker** | receives the request and orchestrates |
 | AI models | **Workers AI** | embeddings + the answering LLM |
 | Vector database | **Vectorize** | stores & searches the vectors |
@@ -62,5 +74,8 @@ curl -X POST https://serverless-rag-assistant.tienvo.workers.dev/ask \
 - **~$0 infrastructure** — serverless, no server or database to host.
 
 ---
+
+> 💡 **Repository Discoverability**: Configured with GitHub topics (`rag`, `cloudflare-workers`, `workers-ai`, `vectorize`, `llm`, `serverless`, `r2`, `ai`), a live demo link in the About section, and a custom social preview image (`assets/social-preview.png`).
+
 
 > Built by **Juan Berrio** — Cloud &amp; Data Engineer. Portfolio: [juanberrio0399.github.io](https://juanberrio0399.github.io)
