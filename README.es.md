@@ -41,12 +41,24 @@ Docs →  trozos → embeddings → Vectorize   |  pregunta → embedding → Ve
 
 ## Demo en vivo
 
-🟢 **En vivo:** https://serverless-rag-assistant.tienvo.workers.dev
+🟢 **Pruébalo en el navegador — sin terminal:** https://serverless-rag-assistant.tienvo.workers.dev
+
+El propio Worker sirve una pequeña **interfaz web** (HTML/JS vanilla, sin build): eliges una pregunta de ejemplo, pulsas **Obtener respuesta** y ves la respuesta fundamentada **con su documento fuente y los puntajes de similitud** en un clic. Un panel *Avanzado* permite ingerir tu propio documento (protegido por token — tú lo pegas, nada se guarda en la página).
+
+![Serverless RAG Assistant — demo en el navegador: preguntar y obtener una respuesta fundamentada con fuentes y puntajes de similitud](docs/demo.gif)
+
+<!-- El GIF de arriba se graba aparte (el binario no se incluye en este cambio de código). Ver docs/DEMO.md para el guion de grabación de ~20s. Hasta que se agregue, el enlace de la imagen estará roto — es lo esperado en esta rama. -->
+
+> *Grabación del GIF pendiente — ver [`docs/DEMO.md`](docs/DEMO.md) para el flujo exacto ingerir → preguntar → respuesta a capturar.*
+
+<details>
+<summary><b>¿Prefieres la terminal?</b> Lo mismo con <code>curl</code> (referencia secundaria)</summary>
 
 ```bash
-# 1) Enseñarle un documento
+# 1) Enseñarle un documento  (la ingesta está protegida por token)
 curl -X POST https://serverless-rag-assistant.tienvo.workers.dev/ingest \
   -H "content-type: application/json" \
+  -H "authorization: Bearer <TU_INGEST_TOKEN>" \
   -d '{"text":"El texto de tu documento aquí...","source":"mi-doc"}'
 
 # 2) Preguntar (con base en tus documentos — espera ~10s tras ingerir)
@@ -54,6 +66,8 @@ curl -X POST https://serverless-rag-assistant.tienvo.workers.dev/ask \
   -H "content-type: application/json" \
   -d '{"question":"..."}'
 ```
+
+</details>
 
 **Puntos clave:**
 - **Anti-alucinación** — responde "no sé" cuando la respuesta no está en tus documentos (guardarraíl por prompt engineering).

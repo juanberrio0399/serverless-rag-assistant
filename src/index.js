@@ -108,7 +108,7 @@ async function handleAsk(request, env) {
 
 const INDEX_HTML = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Serverless RAG Assistant</title>
 <style>
-:root{--bg:#f5f7fa;--card:#ffffff;--ink:#0f172a;--body:#334155;--mut:#64748b;--line:#e6eaf0;--acc:#1d4ed8;--soft:#eef3ff}
+:root{--bg:#f5f7fa;--card:#ffffff;--ink:#0f172a;--body:#334155;--mut:#64748b;--line:#e6eaf0;--acc:#1d4ed8;--soft:#eef3ff;--ok:#0f766e}
 *{box-sizing:border-box}
 body{margin:0;font-family:"Segoe UI",system-ui,Arial,sans-serif;background:var(--bg);color:var(--body);display:flex;min-height:100vh;align-items:center;justify-content:center;padding:24px;line-height:1.6}
 .card{max-width:680px;width:100%;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:34px;box-shadow:0 12px 44px -22px rgba(15,23,42,.20)}
@@ -122,10 +122,25 @@ h1{font-size:24px;color:var(--ink);margin:6px 0}
 .chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px}
 .chip{font-size:13px;background:var(--soft);border:1px solid #dbe4ff;color:var(--acc);padding:6px 12px;border-radius:8px;cursor:pointer;transition:background .15s}
 .chip:hover{background:#e0e9ff}
-textarea{width:100%;background:#fff;border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:12px;font-size:15px;resize:vertical;min-height:58px;font-family:inherit}
+textarea,input.txt{width:100%;background:#fff;border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:12px;font-size:15px;resize:vertical;font-family:inherit}
+textarea{min-height:58px}
 button.ask{margin-top:10px;background:var(--acc);color:#fff;border:none;border-radius:10px;padding:11px 22px;font-weight:600;cursor:pointer;font-size:15px}
 button.ask:hover{background:#1843b8}
-.out{margin-top:16px;background:#f8fafc;border:1px solid var(--line);border-radius:10px;padding:15px;min-height:46px;font-size:15px;color:var(--ink);white-space:pre-wrap}
+button.ask:disabled{opacity:.55;cursor:progress}
+.out{margin-top:16px;background:#f8fafc;border:1px solid var(--line);border-radius:10px;padding:15px;min-height:46px;font-size:15px;color:var(--ink)}
+.out .ans{white-space:pre-wrap}
+.out .err{color:#b91c1c}
+.srcs{margin-top:12px;padding-top:11px;border-top:1px dashed var(--line);font-size:13px;color:var(--mut)}
+.srcs b{color:var(--ink);font-weight:600}
+.score{display:inline-block;font-variant-numeric:tabular-nums;background:#ecfdf5;color:var(--ok);border:1px solid #ccece4;border-radius:6px;padding:1px 7px;margin-left:6px;font-size:12px}
+details{margin-top:22px;border-top:1px solid var(--line);padding-top:16px}
+summary{cursor:pointer;font-size:13.5px;font-weight:600;color:var(--ink);list-style:none}
+summary::-webkit-details-marker{display:none}
+summary::before{content:"\\25B8 ";color:var(--mut)}
+details[open] summary::before{content:"\\25BE ";color:var(--mut)}
+.row{display:flex;gap:10px;margin-top:12px}
+.row .txt{flex:1}
+.hint{font-size:12px;color:var(--mut);margin:6px 0 0}
 .foot{margin-top:20px;padding-top:15px;border-top:1px solid var(--line);color:var(--mut);font-size:13px}
 .foot a{color:var(--acc);text-decoration:none}
 </style></head><body>
@@ -138,15 +153,65 @@ button.ask:hover{background:#1843b8}
   <p class="label" data-en="This demo is preloaded with a short profile. Select an example question:" data-es="Esta demostracion trae cargado un perfil breve. Selecciona una pregunta de ejemplo:">This demo is preloaded with a short profile. Select an example question:</p>
   <div class="chips" id="chips"></div>
   <textarea id="q"></textarea>
-  <button class="ask" onclick="ask()" data-en="Get answer" data-es="Obtener respuesta">Get answer</button>
-  <div class="out" id="out" data-en="The answer will appear here, with its source document." data-es="La respuesta aparecera aqui, con su documento fuente.">The answer will appear here, with its source document.</div>
+  <button class="ask" id="askBtn" onclick="ask()" data-en="Get answer" data-es="Obtener respuesta">Get answer</button>
+  <div class="out" id="out"><span class="ans" data-en="The answer will appear here, with its source document and similarity scores." data-es="La respuesta aparecera aqui, con su documento fuente y los puntajes de similitud.">The answer will appear here, with its source document and similarity scores.</span></div>
+
+  <details id="ing">
+    <summary data-en="Advanced: ingest your own document" data-es="Avanzado: ingiere tu propio documento">Advanced: ingest your own document</summary>
+    <p class="hint" data-en="Ingestion is token-protected. Paste your INGEST_TOKEN to teach the assistant a new document (nothing is stored in this page)." data-es="La ingesta esta protegida por token. Pega tu INGEST_TOKEN para ensenarle un documento nuevo (nada se guarda en esta pagina).">Ingestion is token-protected. Paste your INGEST_TOKEN to teach the assistant a new document (nothing is stored in this page).</p>
+    <textarea id="itext" data-en-ph="Paste document text here..." data-es-ph="Pega el texto del documento aqui..."></textarea>
+    <div class="row">
+      <input class="txt" id="isrc" data-en-ph="source name (e.g. my-doc)" data-es-ph="nombre de la fuente (ej. mi-doc)"/>
+      <input class="txt" id="itok" type="password" placeholder="INGEST_TOKEN"/>
+    </div>
+    <button class="ask" id="ingBtn" onclick="ingest()" data-en="Ingest" data-es="Ingerir">Ingest</button>
+    <div class="out" id="iout" style="display:none"></div>
+  </details>
+
   <p class="foot"><span data-en="Designed and built by Juan Berrio, Cloud &amp; Data Engineer. Source code:" data-es="Disenado y construido por Juan Berrio, Cloud &amp; Data Engineer. Codigo fuente:">Designed and built by Juan Berrio, Cloud &amp; Data Engineer. Source code:</span> <a href="https://github.com/juanberrio0399/serverless-rag-assistant" target="_blank">GitHub</a></p>
 </div>
 <script>
+var LANG="en";
 var EX={en:["How many records does DataForge process?","What technologies does DataForge use?","How often does DataForge run?"],es:["Cuantos registros procesa DataForge?","Que tecnologias usa DataForge?","Cada cuanto se ejecuta DataForge?"]};
+var T={en:{asking:"Asking...",ingesting:"Ingesting...",err:"Error: ",sources:"Sources",empty:"Type a question first.",noText:"Paste some document text first.",noTok:"Paste your INGEST_TOKEN first.",done:"Ingested "},es:{asking:"Consultando...",ingesting:"Ingiriendo...",err:"Error: ",sources:"Fuentes",empty:"Escribe una pregunta primero.",noText:"Pega el texto de un documento primero.",noTok:"Pega tu INGEST_TOKEN primero.",done:"Ingeridos "}};
+function esc(s){return String(s).replace(/[&<>]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;"}[c]})}
 function chips(l){var c=document.getElementById("chips");c.innerHTML="";EX[l].forEach(function(t){var b=document.createElement("span");b.className="chip";b.textContent=t;b.onclick=function(){document.getElementById("q").value=t};c.appendChild(b)})}
-function L(l){document.documentElement.lang=l;document.querySelectorAll("[data-en]").forEach(function(e){var v=e.getAttribute("data-"+l);if(v)e.textContent=v});document.getElementById("bEN").classList.toggle("on",l==="en");document.getElementById("bES").classList.toggle("on",l==="es");chips(l);document.getElementById("q").value=EX[l][0]}
-async function ask(){var q=document.getElementById("q").value.trim(),o=document.getElementById("out");if(!q)return;o.textContent="...";try{var r=await fetch("/ask",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({question:q})});var d=await r.json();o.textContent=(d.answer||d.error||"-")+(d.sources&&d.sources.length?"   ["+d.sources.join(", ")+"]":"")}catch(e){o.textContent="Error: "+e.message}}
+function L(l){LANG=l;document.documentElement.lang=l;document.querySelectorAll("[data-en]").forEach(function(e){var v=e.getAttribute("data-"+l);if(v)e.textContent=v});document.querySelectorAll("[data-en-ph]").forEach(function(e){var v=e.getAttribute("data-"+l+"-ph");if(v)e.placeholder=v});document.getElementById("bEN").classList.toggle("on",l==="en");document.getElementById("bES").classList.toggle("on",l==="es");chips(l);document.getElementById("q").value=EX[l][0]}
+async function ask(){
+  var q=document.getElementById("q").value.trim(),o=document.getElementById("out"),btn=document.getElementById("askBtn");
+  if(!q){o.innerHTML='<span class="err">'+T[LANG].empty+'</span>';return}
+  btn.disabled=true;o.innerHTML='<span class="ans">'+T[LANG].asking+'</span>';
+  try{
+    var r=await fetch("/ask",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({question:q})});
+    var d=await r.json();
+    if(!r.ok||d.error){o.innerHTML='<span class="err">'+esc(d.error||("HTTP "+r.status))+'</span>';return}
+    var html='<div class="ans">'+esc(d.answer||"-")+'</div>';
+    if(d.matches&&d.matches.length){
+      html+='<div class="srcs"><b>'+T[LANG].sources+':</b> ';
+      html+=d.matches.map(function(m){return esc(m.source)+'<span class="score">'+Number(m.score).toFixed(3)+'</span>'}).join(" ");
+      html+='</div>';
+    }else if(d.sources&&d.sources.length){
+      html+='<div class="srcs"><b>'+T[LANG].sources+':</b> '+esc(d.sources.join(", "))+'</div>';
+    }
+    o.innerHTML=html;
+  }catch(e){o.innerHTML='<span class="err">'+T[LANG].err+esc(e.message)+'</span>'}
+  finally{btn.disabled=false}
+}
+async function ingest(){
+  var text=document.getElementById("itext").value.trim(),src=document.getElementById("isrc").value.trim()||"manual",tok=document.getElementById("itok").value.trim();
+  var o=document.getElementById("iout"),btn=document.getElementById("ingBtn");
+  o.style.display="block";
+  if(!text){o.innerHTML='<span class="err">'+T[LANG].noText+'</span>';return}
+  if(!tok){o.innerHTML='<span class="err">'+T[LANG].noTok+'</span>';return}
+  btn.disabled=true;o.innerHTML='<span class="ans">'+T[LANG].ingesting+'</span>';
+  try{
+    var r=await fetch("/ingest",{method:"POST",headers:{"content-type":"application/json","authorization":"Bearer "+tok},body:JSON.stringify({text:text,source:src})});
+    var d=await r.json();
+    if(!r.ok||d.error){o.innerHTML='<span class="err">'+esc(d.error||("HTTP "+r.status))+'</span>';return}
+    o.innerHTML='<span class="ans">'+T[LANG].done+d.chunks+' chunk(s) &rarr; "'+esc(d.source)+'". '+esc(d.note||"")+'</span>';
+  }catch(e){o.innerHTML='<span class="err">'+T[LANG].err+esc(e.message)+'</span>'}
+  finally{btn.disabled=false}
+}
 L("en");
 </script></body></html>`;
 

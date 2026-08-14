@@ -53,12 +53,24 @@ Docs →  chunk → embeddings → Vectorize   |  question → embedding → Vec
 
 ## Live demo
 
-🟢 **Live:** https://serverless-rag-assistant.tienvo.workers.dev
+🟢 **Try it in your browser — no terminal needed:** https://serverless-rag-assistant.tienvo.workers.dev
+
+The Worker itself serves a small **web UI** (vanilla HTML/JS, no build step): pick an example question, hit **Get answer**, and see the grounded response **with its source document and similarity scores** in one click. An *Advanced* panel lets you ingest your own document (token-protected — you paste the token, nothing is stored in the page).
+
+![Serverless RAG Assistant — browser demo: ask a question, get a grounded answer with sources and similarity scores](docs/demo.gif)
+
+<!-- The GIF above is recorded separately (binary not committed by the code change). See docs/DEMO.md for the 20-second recording script. Until it is added the image link will be broken — that is expected on this branch. -->
+
+> *GIF recording pending — see [`docs/DEMO.md`](docs/DEMO.md) for the exact ingest → ask → answer flow to capture.*
+
+<details>
+<summary><b>Prefer the terminal?</b> Same thing with <code>curl</code> (secondary reference)</summary>
 
 ```bash
-# 1) Teach it a document
+# 1) Teach it a document  (ingest is token-protected)
 curl -X POST https://serverless-rag-assistant.tienvo.workers.dev/ingest \
   -H "content-type: application/json" \
+  -H "authorization: Bearer <YOUR_INGEST_TOKEN>" \
   -d '{"text":"Your document text here...","source":"my-doc"}'
 
 # 2) Ask (grounded in your docs — wait ~10s after ingesting)
@@ -66,6 +78,8 @@ curl -X POST https://serverless-rag-assistant.tienvo.workers.dev/ask \
   -H "content-type: application/json" \
   -d '{"question":"..."}'
 ```
+
+</details>
 
 **Highlights:**
 - **Anti-hallucination** — replies "I don't know" when the answer isn't in your documents (prompt-engineered guardrail).
