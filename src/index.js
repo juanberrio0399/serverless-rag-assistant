@@ -5,16 +5,21 @@
 //   POST /ingest   → { text, source } : chunk → embed → store in Vectorize
 //   POST /ask      → { question }      : retrieve relevant chunks → LLM answer  (Module 4)
 
-const EMBED_MODEL = "@cf/baai/bge-base-en-v1.5";      // 768-dim embeddings
-const LLM_MODEL = "@cf/meta/llama-3.2-3b-instruct";   // answering model (current, multilingual)
-const CHUNK_SIZE = 800;                                // characters per chunk
+const EMBED_MODEL = '@cf/baai/bge-base-en-v1.5'; // Alternativa reciente: @cf/google/embeddinggemma-300m (requiere re-ingestar)
+const LLM_MODEL = '@cf/meta/llama-3.2-3b-instruct'; // Alternativas vigentes: @cf/zai-org/glm-4.7-flash, @cf/openai/gpt-oss-20b
+const CHUNK_SIZE = 800;
+const CHUNK_OVERLAP = 120;
 
 // Split raw text into fixed-size chunks (small enough for good retrieval).
-function chunkText(text, size = CHUNK_SIZE) {
+async function chunkText(text, size = CHUNK_SIZE, overlap = CHUNK_OVERLAP) {
   const clean = text.replace(/\s+/g, " ").trim();
   const chunks = [];
-  for (let i = 0; i < clean.length; i += size) {
+  let i = 0;
+  const step = size - overlap;
+  while (i < clean.length) {
     chunks.push(clean.slice(i, i + size));
+    if (i + size >= clean.length) break;
+    i += step;
   }
   return chunks;
 }
@@ -38,7 +43,7 @@ async function handleIngest(request, env) {
   if (!text) return json({ error: "Missing 'text' in body." }, 400);
 
   // 1) Break the document into chunks
-  const chunks = chunkText(text);
+  const chunks = await chunkText(text);
 
   // 2) Turn every chunk into an embedding (one AI call for the whole batch)
   const { data: vectors } = await env.AI.run(EMBED_MODEL, { text: chunks });
@@ -77,9 +82,29 @@ async function handleAsk(request, env) {
 
   // 2) Retrieve the most similar chunks (semantic search)
   const results = await env.VECTORIZE.query(data[0], { topK, returnMetadata: "all" });
-  const matches = results.matches ?? [];
+  let matches = results.matches ?? [];
   if (matches.length === 0) {
     return json({ answer: "No documents ingested yet — add some with /ingest first.", sources: [] });
+  }
+
+  if (matches.length > 0) {
+    try {
+      const textsToRerank = matches.map(m => m.metadata.text || '');
+      const rerankRes = await env.AI.run('@cf/baai/bge-reranker-base', {
+        query: question,
+        documents: textsToRerank
+      });
+      if (rerankRes && rerankRes.results) {
+        const scored = rerankRes.results
+          .filter(r => (r.score ?? r.relevance_score ?? 0) >= 0.4)
+          .sort((a, b) => (b.score ?? b.relevance_score ?? 0) - (a.score ?? a.relevance_score ?? 0));
+        if (scored.length > 0) {
+          matches = scored.map(r => matches[r.index]);
+        }
+      }
+    } catch (e) {
+      // fallback to original matches if reranker fails
+    }
   }
 
   // 3) Build the context block from the retrieved chunks

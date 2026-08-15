@@ -32,6 +32,11 @@ Un servicio **RAG** (Generación Aumentada por Recuperación): recupera los frag
 | **Reranking y Pipeline** | Lógica en código | Gestionado nativamente |
 | **Propósito** | Demostración y portafolio | Producción ágil / Bajo mantenimiento |
 
+## Mejoras recientes (RAG Avanzado)
+- **Chunk Overlap**: Particionado con solapamiento (~15%) para preservar el contexto en los bordes.
+- **Reranking**: Uso de `@cf/baai/bge-reranker-base` para reordenar los resultados de Vectorize según relevancia real antes de consultar al LLM.
+- **Modelos**: Configurado con embeddings `bge-base-en-v1.5` y LLM `llama-3.2-3b-instruct`, con soporte documentado para migrar a `embeddinggemma-300m`, `glm-4.7-flash` o `gpt-oss-20b`.
+
 ## Arquitectura (todo serverless)
 
 
