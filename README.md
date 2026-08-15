@@ -46,7 +46,7 @@ Docs →  chunk → embeddings → Vectorize   |  question → embedding → Vec
 
 ## Tech / skills demonstrated
 
-`Cloudflare Workers` · `Workers AI` · `Vectorize` · `R2` · `RAG` · `LLM integration` · `embeddings` · `Infrastructure as Code (wrangler)` · `serverless` · `CI/CD`
+`Cloudflare Workers` · `Workers AI` · `Vectorize` · `R2` · `RAG` · `LLM integration` · `embeddings` · `Infrastructure as Code (Terraform, Wrangler)` · `serverless` · `CI/CD`
 
 ## Live demo
 

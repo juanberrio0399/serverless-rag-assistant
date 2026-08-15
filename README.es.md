@@ -44,7 +44,7 @@ Docs →  trozos → embeddings → Vectorize   |  pregunta → embedding → Ve
 
 ## Tecnologías / habilidades demostradas
 
-`Cloudflare Workers` · `Workers AI` · `Vectorize` · `R2` · `RAG` · `Integración de LLM` · `embeddings` · `Infraestructura como código (wrangler)` · `serverless` · `CI/CD`
+`Cloudflare Workers` · `Workers AI` · `Vectorize` · `R2` · `RAG` · `Integración de LLM` · `embeddings` · `Infraestructura como código (Terraform, Wrangler)` · `serverless` · `CI/CD`
 
 ## Demo en vivo
 
