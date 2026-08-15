@@ -14,6 +14,12 @@
 
 > 💡 **Repository Discoverability**: Configured with GitHub topics (`rag`, `cloudflare-workers`, `workers-ai`, `vectorize`, `llm`, `serverless`, `r2`, `ai`), a live demo link in the About section, and a custom social preview image (`assets/social-preview.png`).
 
+## Case Study Overview
+
+- **Problem**: Building low-latency, secure RAG systems without managing servers or incurring high idle costs.
+- **Solution**: A fully serverless RAG pipeline leveraging Cloudflare's edge ecosystem (Workers AI, Vectorize, R2).
+- **Engineering Decisions**: Edge compute for minimal latency, vector database separation from unstructured storage, and strict prompt-engineered guardrails against hallucinations.
+- **Results**: ~$0 ongoing idle infrastructure cost, 100% serverless footprint, and high determinism in answers.
 
 ## What it is
 
@@ -21,7 +27,7 @@ A **RAG** (Retrieval-Augmented Generation) service: it retrieves the most releva
 
 ## Architecture (all serverless)
 
-```
+
         ┌─────────── INGEST ───────────┐        ┌────────── ASK ──────────┐
 Docs →  chunk → embeddings → Vectorize   |  question → embedding → Vectorize
         (Workers AI)   (vector DB)        |          (top-K search)
@@ -29,19 +35,10 @@ Docs →  chunk → embeddings → Vectorize   |  question → embedding → Vec
                                           |     relevant chunks + question
                                           |                 ▼
                                           |     Workers AI (LLM) → answer
-```
+
 
 | Piece | Cloudflare service | Role |
-|---
-
-> 💡 **Repository Discoverability**: Configured with GitHub topics (`rag`, `cloudflare-workers`, `workers-ai`, `vectorize`, `llm`, `serverless`, `r2`, `ai`), a live demo link in the About section, and a custom social preview image (`assets/social-preview.png`).
-|---
-
-> 💡 **Repository Discoverability**: Configured with GitHub topics (`rag`, `cloudflare-workers`, `workers-ai`, `vectorize`, `llm`, `serverless`, `r2`, `ai`), a live demo link in the About section, and a custom social preview image (`assets/social-preview.png`).
-|---
-
-> 💡 **Repository Discoverability**: Configured with GitHub topics (`rag`, `cloudflare-workers`, `workers-ai`, `vectorize`, `llm`, `serverless`, `r2`, `ai`), a live demo link in the About section, and a custom social preview image (`assets/social-preview.png`).
-|
+|---|---|---|
 | API / brain | **Worker** | receives the request and orchestrates |
 | AI models | **Workers AI** | embeddings + the answering LLM |
 | Vector database | **Vectorize** | stores & searches the vectors |
@@ -53,7 +50,9 @@ Docs →  chunk → embeddings → Vectorize   |  question → embedding → Vec
 
 ## Live demo
 
-🟢 **Try it in your browser — no terminal needed:** https://serverless-rag-assistant.tienvo.workers.dev
+> **TODO:** Redeploy this Worker under Juan Berrio's personal Cloudflare account/domain and update this URL.
+
+🟢 **Try it in your browser — no terminal needed:** https://<TU-SUBDOMINIO>.workers.dev
 
 The Worker itself serves a small **web UI** (vanilla HTML/JS, no build step): pick an example question, hit **Get answer**, and see the grounded response **with its source document and similarity scores** in one click. An *Advanced* panel lets you ingest your own document (token-protected — you paste the token, nothing is stored in the page).
 
@@ -66,18 +65,18 @@ The Worker itself serves a small **web UI** (vanilla HTML/JS, no build step): pi
 <details>
 <summary><b>Prefer the terminal?</b> Same thing with <code>curl</code> (secondary reference)</summary>
 
-```bash
+bash
 # 1) Teach it a document  (ingest is token-protected)
-curl -X POST https://serverless-rag-assistant.tienvo.workers.dev/ingest \
+curl -X POST https://<TU-SUBDOMINIO>.workers.dev/ingest \
   -H "content-type: application/json" \
   -H "authorization: Bearer <YOUR_INGEST_TOKEN>" \
   -d '{"text":"Your document text here...","source":"my-doc"}'
 
 # 2) Ask (grounded in your docs — wait ~10s after ingesting)
-curl -X POST https://serverless-rag-assistant.tienvo.workers.dev/ask \
+curl -X POST https://<TU-SUBDOMINIO>.workers.dev/ask \
   -H "content-type: application/json" \
   -d '{"question":"..."}'
-```
+
 
 </details>
 
@@ -89,10 +88,7 @@ curl -X POST https://serverless-rag-assistant.tienvo.workers.dev/ask \
 
 ---
 
-> 💡 **Repository Discoverability**: Configured with GitHub topics (`rag`, `cloudflare-workers`, `workers-ai`, `vectorize`, `llm`, `serverless`, `r2`, `ai`), a live demo link in the About section, and a custom social preview image (`assets/social-preview.png`).
-
-
-> Built by **Juan Berrio** — Cloud &amp; Data Engineer. Portfolio: [juanberrio0399.github.io](https://juanberrio0399.github.io)
+> Built by **Juan Berrio** — Cloud &amp; Data Engineer. Explore my complete portfolio and CV at [juanberrio0399.github.io](https://juanberrio0399.github.io).
 
 ## License
 This project is licensed under the Apache-2.0 License. Any reuse of this code must retain the copyright notice and attribution to Juan Berrio. See the [LICENSE](./LICENSE) file for details.
