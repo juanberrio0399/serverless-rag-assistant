@@ -12,13 +12,20 @@
 
 ---
 
+## Resumen del Caso de Estudio
+
+- **Problema**: Construir sistemas RAG seguros y de baja latencia sin gestionar servidores ni incurrir en costes fijos de infraestructura.
+- **Solución**: Un pipeline RAG completamente serverless apalancado en el ecosistema edge de Cloudflare (Workers AI, Vectorize, R2).
+- **Decisiones de Ingeniería**: Computación edge para minimizar latencia, separación de la base vectorial frente al almacenamiento no estructurado, y robustos guardarraíles mediante prompt engineering contra alucinaciones.
+- **Resultados**: Coste de infraestructura en reposo ~$0, arquitectura 100% serverless y alta determinabilidad en las respuestas.
+
 ## Qué es
 
 Un servicio **RAG** (Generación Aumentada por Recuperación): recupera los fragmentos más relevantes de tus documentos y deja que un LLM responda **con base en ellos**, en lugar de adivinar. Construido como demostración de **desplegar y operar IA sobre infraestructura cloud**.
 
 ## Arquitectura (todo serverless)
 
-```
+
         ┌─────────── INGESTA ──────────┐        ┌────────── PREGUNTA ─────┐
 Docs →  trozos → embeddings → Vectorize   |  pregunta → embedding → Vectorize
         (Workers AI)   (base vectorial)    |          (búsqueda top-K)
@@ -26,7 +33,7 @@ Docs →  trozos → embeddings → Vectorize   |  pregunta → embedding → Ve
                                           |     fragmentos relevantes + pregunta
                                           |                 ▼
                                           |     Workers AI (LLM) → respuesta
-```
+
 
 | Pieza | Servicio Cloudflare | Rol |
 |---|---|---|
@@ -41,7 +48,9 @@ Docs →  trozos → embeddings → Vectorize   |  pregunta → embedding → Ve
 
 ## Demo en vivo
 
-🟢 **Pruébalo en el navegador — sin terminal:** https://serverless-rag-assistant.tienvo.workers.dev
+> **TODO:** Redesplegar este Worker bajo la cuenta y subdominio personal de Juan Berrio en Cloudflare y actualizar esta URL.
+
+🟢 **Pruébalo en el navegador — sin terminal:** https://<TU-SUBDOMINIO>.workers.dev
 
 El propio Worker sirve una pequeña **interfaz web** (HTML/JS vanilla, sin build): eliges una pregunta de ejemplo, pulsas **Obtener respuesta** y ves la respuesta fundamentada **con su documento fuente y los puntajes de similitud** en un clic. Un panel *Avanzado* permite ingerir tu propio documento (protegido por token — tú lo pegas, nada se guarda en la página).
 
@@ -54,18 +63,18 @@ El propio Worker sirve una pequeña **interfaz web** (HTML/JS vanilla, sin build
 <details>
 <summary><b>¿Prefieres la terminal?</b> Lo mismo con <code>curl</code> (referencia secundaria)</summary>
 
-```bash
+bash
 # 1) Enseñarle un documento  (la ingesta está protegida por token)
-curl -X POST https://serverless-rag-assistant.tienvo.workers.dev/ingest \
+curl -X POST https://<TU-SUBDOMINIO>.workers.dev/ingest \
   -H "content-type: application/json" \
   -H "authorization: Bearer <TU_INGEST_TOKEN>" \
   -d '{"text":"El texto de tu documento aquí...","source":"mi-doc"}'
 
 # 2) Preguntar (con base en tus documentos — espera ~10s tras ingerir)
-curl -X POST https://serverless-rag-assistant.tienvo.workers.dev/ask \
+curl -X POST https://<TU-SUBDOMINIO>.workers.dev/ask \
   -H "content-type: application/json" \
   -d '{"question":"..."}'
-```
+
 
 </details>
 
@@ -77,7 +86,7 @@ curl -X POST https://serverless-rag-assistant.tienvo.workers.dev/ask \
 
 ---
 
-> Hecho por **Juan Berrio** — Cloud &amp; Data Engineer. Portafolio: [juanberrio0399.github.io](https://juanberrio0399.github.io)
+> Hecho por **Juan Berrio** — Cloud &amp; Data Engineer. Explora mi portafolio y CV completo en [juanberrio0399.github.io](https://juanberrio0399.github.io).
 
 ## Licencia
 Este proyecto está bajo la Licencia Apache-2.0. Cualquier reutilización de este código debe conservar el aviso de copyright y la atribución a Juan Berrio. Consulta el archivo [LICENSE](./LICENSE) para más detalles.
