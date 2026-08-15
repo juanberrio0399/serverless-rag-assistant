@@ -5,16 +5,33 @@
 //   POST /ingest   → { text, source } : chunk → embed → store in Vectorize
 //   POST /ask      → { question }      : retrieve relevant chunks → LLM answer  (Module 4)
 
+// --- Models (Workers AI) --------------------------------------------------
+// Defaults kept intentionally: changing EMBED_MODEL alters the vector
+// dimension and REQUIRES a full re-ingest of the Vectorize index, so it is
+// documented here, not switched. Current alternatives worth an A/B test:
+//   LLM:        @cf/zai-org/glm-4.7-flash (fast tool-calling),
+//               @cf/openai/gpt-oss-20b (low latency) / -120b (production)
+//   Embeddings: @cf/google/embeddinggemma-300m (recent, stronger)
+//               ^ swapping this needs a re-ingest (different dimension/index).
 const EMBED_MODEL = "@cf/baai/bge-base-en-v1.5";      // 768-dim embeddings
 const LLM_MODEL = "@cf/meta/llama-3.2-3b-instruct";   // answering model (current, multilingual)
+const RERANK_MODEL = "@cf/baai/bge-reranker-base";    // cross-encoder reranker (query↔chunk relevance)
 const CHUNK_SIZE = 800;                                // characters per chunk
+const CHUNK_OVERLAP = 120;                             // chars shared between consecutive chunks (~15%): keeps context across borders, improves recall
+const MIN_RERANK_SCORE = 0.4;                          // drop weakly-relevant chunks after reranking
 
-// Split raw text into fixed-size chunks (small enough for good retrieval).
-function chunkText(text, size = CHUNK_SIZE) {
+// Split raw text into overlapping chunks. Overlap keeps sentences that fall on
+// a chunk boundary retrievable from both sides (better recall). The step is
+// `size - overlap`; it is clamped to >= 1 so a mis-set overlap can't loop forever.
+function chunkText(text, size = CHUNK_SIZE, overlap = CHUNK_OVERLAP) {
   const clean = text.replace(/\s+/g, " ").trim();
+  if (!clean) return [];
+  if (clean.length <= size) return [clean];
+  const step = Math.max(1, size - overlap);
   const chunks = [];
-  for (let i = 0; i < clean.length; i += size) {
+  for (let i = 0; i < clean.length; i += step) {
     chunks.push(clean.slice(i, i + size));
+    if (i + size >= clean.length) break; // last window already reached the end
   }
   return chunks;
 }
@@ -82,8 +99,38 @@ async function handleAsk(request, env) {
     return json({ answer: "No documents ingested yet — add some with /ingest first.", sources: [] });
   }
 
-  // 3) Build the context block from the retrieved chunks
-  const context = matches.map((m, i) => `[${i + 1}] ${m.metadata.text}`).join("\n\n");
+  // 2b) Rerank the retrieved chunks with a cross-encoder for true query↔chunk
+  //     relevance (Vectorize gives approximate vector similarity; the reranker
+  //     scores the pair directly and re-orders, lifting precision on noisy corpora).
+  //     Verified output shape (Cloudflare workers-types Ai_Cf_Baai_Bge_Reranker_Base_Output):
+  //       { response: [ { id, score } ] }
+  //     where `id` is the INDEX into the `contexts` we sent and `score` is the
+  //     relevance score. We map each id back to its match and sort by score desc.
+  let ordered = matches;
+  try {
+    const rr = await env.AI.run(RERANK_MODEL, {
+      query: question,
+      contexts: matches.map((m) => ({ text: m.metadata.text })),
+    });
+    const ranking = rr?.response;
+    if (Array.isArray(ranking) && ranking.length) {
+      const reranked = ranking
+        .filter((r) => r && typeof r.id === "number" && matches[r.id])
+        .map((r) => ({ ...matches[r.id], rerankScore: r.score }))
+        .sort((a, b) => (b.rerankScore ?? 0) - (a.rerankScore ?? 0));
+      if (reranked.length) {
+        const kept = reranked.filter((m) => (m.rerankScore ?? 0) >= MIN_RERANK_SCORE);
+        // Keep at least the top match even if all scores fall below the threshold.
+        ordered = kept.length ? kept : [reranked[0]];
+      }
+    }
+  } catch (err) {
+    // Reranker unavailable → fall back to the original Vectorize similarity order.
+    ordered = matches;
+  }
+
+  // 3) Build the context block from the reranked chunks
+  const context = ordered.map((m, i) => `[${i + 1}] ${m.metadata.text}`).join("\n\n");
 
   // 4) Prompt engineering: force the model to answer ONLY from the context
   const messages = [
@@ -101,8 +148,9 @@ async function handleAsk(request, env) {
 
   return json({
     answer: ai.response,
-    sources: [...new Set(matches.map((m) => m.metadata.source))],
-    matches: matches.map((m) => ({ score: m.score, source: m.metadata.source })),
+    sources: [...new Set(ordered.map((m) => m.metadata.source))],
+    // score = reranker relevance when reranking succeeded, else the vector similarity.
+    matches: ordered.map((m) => ({ score: m.rerankScore ?? m.score, source: m.metadata.source })),
   });
 }
 
