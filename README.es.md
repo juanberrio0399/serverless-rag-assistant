@@ -46,6 +46,8 @@ Docs →  trozos → embeddings → Vectorize   |  pregunta → embedding → Ve
 
 `Cloudflare Workers` · `Workers AI` · `Vectorize` · `R2` · `RAG` · `Integración de LLM` · `embeddings` · `Infraestructura como código (wrangler)` · `serverless` · `CI/CD`
 
+- **IaC & Cloud:** Terraform (alineado con HashiCorp Terraform Associate 004), Cloudflare Developer Platform (Rutas de aprendizaje Workers/AI), Vectorize, R2.
+
 ## Demo en vivo
 
 > **TODO:** Redesplegar este Worker bajo la cuenta y subdominio personal de Juan Berrio en Cloudflare y actualizar esta URL.
