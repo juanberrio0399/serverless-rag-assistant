@@ -25,6 +25,15 @@
 
 A **RAG** (Retrieval-Augmented Generation) service: it retrieves the most relevant pieces of your documents and lets an LLM answer **based on them** — instead of guessing. Built as a demonstration of **deploying and operating AI on cloud infrastructure**.
 
+## Manual RAG vs AI Search (Managed)
+
+| Característica | Pipeline Manual (`src/index.js`) | Cloudflare AI Search (Gestionado) |
+|---|---|---|
+| **Chunking & Embeddings** | Hecho a mano (Workers AI) | Automático sobre R2 |
+| **Retrieval** | Vectorize (Búsqueda vectorial pura) | Búsqueda Híbrida (Vector + BM25) |
+| **Reranking & Pipeline** | Lógica propia en código | Gestionado nativamente |
+| **Valor / Uso** | Demostración didáctica / Portafolio | Producción rápida / Menos mantenimiento |
+
 ## Architecture (all serverless)
 
 

@@ -23,6 +23,15 @@
 
 Un servicio **RAG** (Generación Aumentada por Recuperación): recupera los fragmentos más relevantes de tus documentos y deja que un LLM responda **con base en ellos**, en lugar de adivinar. Construido como demostración de **desplegar y operar IA sobre infraestructura cloud**.
 
+## RAG Manual vs AI Search (Gestionado)
+
+| Característica | Pipeline Manual (`src/index.js`) | Cloudflare AI Search (Gestionado) |
+|---|---|---|
+| **Chunking y Embeddings** | Manual (Workers AI) | Automático en R2 |
+| **Recuperación (Retrieval)** | Vectorize puro | Búsqueda Híbrida (Vector + BM25) |
+| **Reranking y Pipeline** | Lógica en código | Gestionado nativamente |
+| **Propósito** | Demostración y portafolio | Producción ágil / Bajo mantenimiento |
+
 ## Arquitectura (todo serverless)
 
 
