@@ -7,6 +7,18 @@
 
 const EMBED_MODEL = "@cf/baai/bge-base-en-v1.5";      // 768-dim embeddings
 const LLM_MODEL = "@cf/meta/llama-3.2-3b-instruct";   // answering model (current, multilingual)
+
+// aiAnswer — Workers AI (free) with a Groq fallback (free, GROQ_API_KEY Worker secret) for quota resilience.
+async function aiAnswer(env, messages) {
+  try { const r = await env.AI.run(LLM_MODEL, { messages }); const t = ((r && r.response) || "").trim(); if (t) return t; } catch (e) { console.error("Workers AI:", e.message); }
+  if (env.GROQ_API_KEY) {
+    try {
+      const res = await fetch("https://api.groq.com/openai/v1/chat/completions", { method: "POST", headers: { Authorization: "Bearer " + env.GROQ_API_KEY, "content-type": "application/json" }, body: JSON.stringify({ model: "llama-3.3-70b-versatile", messages, temperature: 0.2 }) });
+      if (res.ok) { const j = await res.json(); return (j?.choices?.[0]?.message?.content || "").trim(); }
+    } catch (e) { console.error("Groq fallback:", e.message); }
+  }
+  return "";
+}
 const CHUNK_SIZE = 800;                                // characters per chunk
 
 // Split raw text into fixed-size chunks (small enough for good retrieval).
@@ -83,10 +95,10 @@ async function handleAsk(request, env) {
     { role: "user", content: `Context:\n${context}\n\nQuestion: ${question}` },
   ];
 
-  const ai = await env.AI.run(LLM_MODEL, { messages });
+  const answer = await aiAnswer(env, messages);
 
   return json({
-    answer: ai.response,
+    answer,
     sources: [...new Set(matches.map((m) => m.metadata.source))],
     matches: matches.map((m) => ({ score: m.score, source: m.metadata.source })),
   });
