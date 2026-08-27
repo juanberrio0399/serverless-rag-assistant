@@ -6,11 +6,28 @@
 //   POST /ask      → { question }      : retrieve relevant chunks → LLM answer  (Module 4)
 
 const EMBED_MODEL = "@cf/baai/bge-base-en-v1.5";      // 768-dim embeddings
-const LLM_MODEL = "@cf/meta/llama-3.2-3b-instruct";   // answering model (current, multilingual)
+const LLM_MODEL = "@cf/meta/llama-3.1-8b-instruct";   // answering model (supports tool use)
 
 // aiAnswer — Workers AI (free) with a Groq fallback (free, GROQ_API_KEY Worker secret) for quota resilience.
 async function aiAnswer(env, messages) {
-  try { const r = await env.AI.run(LLM_MODEL, { messages }); const t = ((r && r.response) || "").trim(); if (t) return t; } catch (e) { console.error("Workers AI:", e.message); }
+  const tools = [{
+    name: "get_current_time",
+    description: "Get the current date and time",
+    parameters: { type: "object", properties: {}, required: [] }
+  }];
+
+  try {
+    let response = await env.AI.run(LLM_MODEL, { messages, tools });
+    if (response.tool_calls && response.tool_calls.length > 0) {
+      const toolCall = response.tool_calls[0];
+      if (toolCall.name === "get_current_time") {
+        messages.push(response);
+        messages.push({ role: "tool", name: "get_current_time", content: new Date().toISOString() });
+        response = await env.AI.run(LLM_MODEL, { messages, tools });
+      }
+    }
+    return (response.response || "").trim();
+  } catch (e) { console.error("Workers AI:", e.message); }
   if (env.GROQ_API_KEY) {
     try {
       const res = await fetch("https://api.groq.com/openai/v1/chat/completions", { method: "POST", headers: { Authorization: "Bearer " + env.GROQ_API_KEY, "content-type": "application/json" }, body: JSON.stringify({ model: "llama-3.3-70b-versatile", messages, temperature: 0.2 }) });
