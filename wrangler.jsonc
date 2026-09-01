@@ -13,6 +13,16 @@
   // Binding a la base vectorial (Vectorize) → env.VECTORIZE
   "vectorize": [
     { "binding": "VECTORIZE", "index_name": "rag-index" }
+  ],
+
+  // Rate limiting nativo de Cloudflare (gratis, sin KV) para proteger /ask del abuso.
+  // Dentro del código lo usas como env.RATE_LIMITER. 20 peticiones cada 60s por IP.
+  "ratelimits": [
+    {
+      "name": "RATE_LIMITER",
+      "namespace_id": "1001",
+      "simple": { "limit": 20, "period": 60 }
+    }
   ]
 
   // (Más adelante agregamos R2 aquí para guardar los documentos originales.)

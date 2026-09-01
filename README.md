@@ -23,10 +23,15 @@ A **RAG** (Retrieval-Augmented Generation) service: it retrieves the most releva
 Docs →  chunk → embeddings → Vectorize   |  question → embedding → Vectorize
         (Workers AI)   (vector DB)        |          (top-K search)
                                           |                 │
-                                          |     relevant chunks + question
+                                          |     candidate chunks → reranker
+                                          |          (cross-encoder, precision)
                                           |                 ▼
                                           |     Workers AI (LLM) → answer
 ```
+
+The **ASK** path is rate-limited per client IP (native Cloudflare rate limiting, no
+extra storage) and over-retrieves candidates that a **cross-encoder reranker**
+(`bge-reranker-base`) re-scores for true query↔chunk relevance before the LLM answers.
 
 | Piece | Cloudflare service | Role |
 |---|---|---|
@@ -37,7 +42,7 @@ Docs →  chunk → embeddings → Vectorize   |  question → embedding → Vec
 
 ## Tech / skills demonstrated
 
-`Cloudflare Workers` · `Workers AI` · `Vectorize` · `R2` · `RAG` · `LLM integration` · `embeddings` · `Infrastructure as Code (wrangler)` · `serverless` · `CI/CD`
+`Cloudflare Workers` · `Workers AI` · `Vectorize` · `R2` · `RAG` · `reranking (cross-encoder)` · `rate limiting` · `LLM integration` · `embeddings` · `Infrastructure as Code (wrangler)` · `serverless` · `CI/CD`
 
 ## Live demo
 
