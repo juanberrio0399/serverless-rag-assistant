@@ -7,6 +7,8 @@
 
 const EMBED_MODEL = "@cf/baai/bge-base-en-v1.5";      // 768-dim embeddings
 const LLM_MODEL = "@cf/meta/llama-3.1-8b-instruct";   // answering model (supports tool use)
+const RERANK_MODEL = "@cf/baai/bge-reranker-base";    // cross-encoder reranker (query↔chunk relevance)
+const MIN_RERANK_SCORE = 0.4;                          // drop weakly-relevant chunks after reranking
 
 // aiAnswer — Workers AI (free) with a Groq fallback (free, GROQ_API_KEY Worker secret) for quota resilience.
 async function aiAnswer(env, messages) {
@@ -84,21 +86,63 @@ async function handleIngest(request, env) {
 
 // POST /ask  — answer a question grounded ONLY in the ingested documents
 async function handleAsk(request, env) {
+  // 0) Rate limit /ask per client IP (protects free Workers AI quota from abuse).
+  //    Optional binding: when RATE_LIMITER isn't configured the endpoint stays open.
+  if (env.RATE_LIMITER) {
+    const ip = request.headers.get("cf-connecting-ip") || "anonymous";
+    const { success } = await env.RATE_LIMITER.limit({ key: ip });
+    if (!success) {
+      return json({ error: "Rate limit exceeded. Please try again later." }, 429);
+    }
+  }
+
   const { question, topK = 5 } = await request.json().catch(() => ({}));
   if (!question) return json({ error: "Missing 'question' in body." }, 400);
 
   // 1) Embed the question with the SAME model used at ingestion
   const { data } = await env.AI.run(EMBED_MODEL, { text: [question] });
 
-  // 2) Retrieve the most similar chunks (semantic search)
-  const results = await env.VECTORIZE.query(data[0], { topK, returnMetadata: "all" });
+  // 2) Retrieve a WIDER candidate pool than we finally use. Reranking only helps
+  //    when it has extra candidates to promote/demote, so we over-retrieve here
+  //    and let the cross-encoder in step 2b narrow it back down to the best ones.
+  const candidateK = Math.max(topK * 3, 12);
+  const results = await env.VECTORIZE.query(data[0], { topK: candidateK, returnMetadata: "all" });
   const matches = results.matches ?? [];
   if (matches.length === 0) {
     return json({ answer: "No documents ingested yet — add some with /ingest first.", sources: [] });
   }
 
-  // 3) Build the context block from the retrieved chunks
-  const context = matches.map((m, i) => `[${i + 1}] ${m.metadata.text}`).join("\n\n");
+  // 2b) Rerank the candidates with a cross-encoder for true query↔chunk relevance
+  //     (Vectorize gives approximate vector similarity; the reranker scores the
+  //     pair directly and re-orders, lifting precision on noisy corpora).
+  //     Output shape: { response: [ { id, score } ] } where `id` indexes into the
+  //     contexts we sent. We map each id back to its match and sort by score desc,
+  //     drop weakly-relevant chunks, and keep at most topK.
+  let ordered = matches;
+  try {
+    const rr = await env.AI.run(RERANK_MODEL, {
+      query: question,
+      contexts: matches.map((m) => ({ text: m.metadata.text })),
+    });
+    const ranking = rr?.response;
+    if (Array.isArray(ranking) && ranking.length) {
+      const reranked = ranking
+        .filter((r) => r && typeof r.id === "number" && matches[r.id])
+        .map((r) => ({ ...matches[r.id], rerankScore: r.score }))
+        .sort((a, b) => (b.rerankScore ?? 0) - (a.rerankScore ?? 0));
+      if (reranked.length) {
+        const kept = reranked.filter((m) => (m.rerankScore ?? 0) >= MIN_RERANK_SCORE);
+        // Keep at least the top match even if all scores fall below the threshold.
+        ordered = (kept.length ? kept : [reranked[0]]).slice(0, topK);
+      }
+    }
+  } catch (err) {
+    // Reranker unavailable → fall back to the original Vectorize similarity order.
+    ordered = matches.slice(0, topK);
+  }
+
+  // 3) Build the context block from the reranked chunks
+  const context = ordered.map((m, i) => `[${i + 1}] ${m.metadata.text}`).join("\n\n");
 
   // 4) Prompt engineering: force the model to answer ONLY from the context
   const messages = [
@@ -116,8 +160,8 @@ async function handleAsk(request, env) {
 
   return json({
     answer,
-    sources: [...new Set(matches.map((m) => m.metadata.source))],
-    matches: matches.map((m) => ({ score: m.score, source: m.metadata.source })),
+    sources: [...new Set(ordered.map((m) => m.metadata.source))],
+    matches: ordered.map((m) => ({ score: m.score, rerankScore: m.rerankScore, source: m.metadata.source })),
   });
 }
 
