@@ -49,16 +49,25 @@ extra storage) and over-retrieves candidates that a **cross-encoder reranker**
 🟢 **Live:** https://serverless-rag-assistant.tienvo.workers.dev
 
 ```bash
-# 1) Teach it a document
+# 1) Teach it a document (ingestion is private: Bearer token = INGEST_TOKEN secret)
 curl -X POST https://serverless-rag-assistant.tienvo.workers.dev/ingest \
+  -H "authorization: Bearer $INGEST_TOKEN" \
   -H "content-type: application/json" \
   -d '{"text":"Your document text here...","source":"my-doc"}'
+
+# 1b) …or a web page: read as clean Markdown through Jina Reader, then chunked and embedded
+curl -X POST https://serverless-rag-assistant.tienvo.workers.dev/ingest-url \
+  -H "authorization: Bearer $INGEST_TOKEN" \
+  -H "content-type: application/json" \
+  -d '{"url":"https://developers.cloudflare.com/vectorize/"}'
 
 # 2) Ask (grounded in your docs — wait ~10s after ingesting)
 curl -X POST https://serverless-rag-assistant.tienvo.workers.dev/ask \
   -H "content-type: application/json" \
   -d '{"question":"..."}'
 ```
+
+Ingestion endpoints are rate limited per IP, accept only public http(s) pages, and index at most 100 chunks (~80k characters) per request (`truncated: true` when a page is longer). Enable them with `wrangler secret put INGEST_TOKEN`; without the secret they answer 503.
 
 **Highlights:**
 - **Anti-hallucination** — replies "I don't know" when the answer isn't in your documents (prompt-engineered guardrail).

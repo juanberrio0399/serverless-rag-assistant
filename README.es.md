@@ -44,16 +44,25 @@ Docs →  trozos → embeddings → Vectorize   |  pregunta → embedding → Ve
 🟢 **En vivo:** https://serverless-rag-assistant.tienvo.workers.dev
 
 ```bash
-# 1) Enseñarle un documento
+# 1) Enseñarle un documento (la ingesta es privada: token Bearer = secreto INGEST_TOKEN)
 curl -X POST https://serverless-rag-assistant.tienvo.workers.dev/ingest \
+  -H "authorization: Bearer $INGEST_TOKEN" \
   -H "content-type: application/json" \
   -d '{"text":"El texto de tu documento aquí...","source":"mi-doc"}'
+
+# 1b) …o una página web: se lee como Markdown limpio con Jina Reader y luego se fragmenta y vectoriza
+curl -X POST https://serverless-rag-assistant.tienvo.workers.dev/ingest-url \
+  -H "authorization: Bearer $INGEST_TOKEN" \
+  -H "content-type: application/json" \
+  -d '{"url":"https://developers.cloudflare.com/vectorize/"}'
 
 # 2) Preguntar (con base en tus documentos — espera ~10s tras ingerir)
 curl -X POST https://serverless-rag-assistant.tienvo.workers.dev/ask \
   -H "content-type: application/json" \
   -d '{"question":"..."}'
 ```
+
+Los endpoints de ingesta tienen rate limit por IP, solo aceptan páginas públicas http(s) e indexan como máximo 100 fragmentos (~80 mil caracteres) por petición (`truncated: true` si la página es más larga). Se activan con `wrangler secret put INGEST_TOKEN`; sin el secreto responden 503.
 
 **Puntos clave:**
 - **Anti-alucinación** — responde "no sé" cuando la respuesta no está en tus documentos (guardarraíl por prompt engineering).
