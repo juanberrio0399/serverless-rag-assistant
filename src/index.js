@@ -57,6 +57,47 @@ function json(data, status = 200) {
   });
 }
 
+// POST /ingest-url — fetch URL via Jina Reader and ingest Markdown content
+async function handleIngestUrl(request, env) {
+  const { url } = await request.json().catch(() => ({}));
+  if (!url) return json({ error: "Missing 'url' in body." }, 400);
+
+  let markdown = "";
+  try {
+    const res = await fetch(`https://r.jina.ai/${url}`, {
+      headers: { "Accept": "text/plain" }
+    });
+    if (!res.ok) {
+      return json({ error: `Failed to fetch URL from Jina Reader: ${res.statusText}` }, 502);
+    }
+    markdown = await res.text();
+  } catch (e) {
+    return json({ error: `Jina Reader fetch error: ${e.message}` }, 500);
+  }
+
+  if (!markdown.trim()) {
+    return json({ error: "Retrieved empty content from URL." }, 400);
+  }
+
+  // Reuse existing chunking and embedding logic
+  const chunks = chunkText(markdown);
+  const { data: vectors } = await env.AI.run(EMBED_MODEL, { text: chunks });
+
+  const toInsert = chunks.map((chunk, i) => ({
+    id: crypto.randomUUID(),
+    values: vectors[i],
+    metadata: { text: chunk, source: url },
+  }));
+  await env.VECTORIZE.insert(toInsert);
+
+  return json({
+    ok: true,
+    source: url,
+    chunks: chunks.length,
+    note: "URL content ingested successfully. Vectors take ~5-10s to become queryable.",
+  });
+}
+
 // POST /ingest  — teach the assistant a document
 async function handleIngest(request, env) {
   const { text, source = "manual" } = await request.json().catch(() => ({}));
@@ -223,6 +264,9 @@ export default {
 
     if (request.method === "POST" && url.pathname === "/ingest") {
       return await handleIngest(request, env);
+    }
+    if (request.method === "POST" && url.pathname === "/ingest-url") {
+      return await handleIngestUrl(request, env);
     }
     if (request.method === "POST" && url.pathname === "/ask") {
       return await handleAsk(request, env);
