@@ -57,6 +57,45 @@ function json(data, status = 200) {
   });
 }
 
+// POST /ingest-url — ingest webpage content via Jina Reader
+async function handleIngestUrl(request, env) {
+  const { url } = await request.json().catch(() => ({}));
+  if (!url) return json({ error: "Missing 'url' in body." }, 400);
+
+  let markdown;
+  try {
+    const res = await fetch(`https://r.jina.ai/${url}`, {
+      headers: { "Accept": "text/plain" }
+    });
+    if (!res.ok) {
+      return json({ error: `Failed to fetch URL from Jina Reader: ${res.statusText}` }, 502);
+    }
+    markdown = await res.text();
+  } catch (e) {
+    return json({ error: `Error fetching URL: ${e.message}` }, 500);
+  }
+
+  if (!markdown) return json({ error: "Received empty content from URL." }, 400);
+
+  const source = url;
+  const chunks = chunkText(markdown);
+  const { data: vectors } = await env.AI.run(EMBED_MODEL, { text: chunks });
+
+  const toInsert = chunks.map((chunk, i) => ({
+    id: crypto.randomUUID(),
+    values: vectors[i],
+    metadata: { text: chunk, source },
+  }));
+  await env.VECTORIZE.insert(toInsert);
+
+  return json({
+    ok: true,
+    source,
+    chunks: chunks.length,
+    note: "Vectors take ~5-10s to become queryable (distributed index).",
+  });
+}
+
 // POST /ingest  — teach the assistant a document
 async function handleIngest(request, env) {
   const { text, source = "manual" } = await request.json().catch(() => ({}));
@@ -216,6 +255,9 @@ export default {
 
     if (request.method === "POST" && url.pathname === "/ingest") {
       return await handleIngest(request, env);
+    }
+    if (request.method === "POST" && url.pathname === "/ingest-url") {
+      return await handleIngestUrl(request, env);
     }
     if (request.method === "POST" && url.pathname === "/ask") {
       return await handleAsk(request, env);
