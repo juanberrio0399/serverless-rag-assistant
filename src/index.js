@@ -210,7 +210,20 @@ L("en");
 </script></body></html>`;
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
+    if (request.method !== 'POST') {
+      return new Response('Method not allowed', { status: 405 });
+    }
+
+    try {
+      const { prompt } = await request.json();
+      if (!prompt) {
+        return new Response('Missing prompt', { status: 400 });
+      }
+
+      // Paso previo: usar el modelo 1B ultra-ligero para detectar saludos o intención simple
+      const intentResponse = await env.AI.run('@cf/meta/llama-3.2-1b-instruct', {
+        mes
    try {
     const url = new URL(request.url);
 
