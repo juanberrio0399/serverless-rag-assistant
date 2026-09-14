@@ -19,13 +19,13 @@ async function aiAnswer(env, messages) {
   }];
 
   try {
-    let response = await env.AI.run(LLM_MODEL, { messages, tools, response_format: { type: "json_object" } });
+    let response = await env.AI.run(LLM_MODEL, { messages, tools });
     if (response.tool_calls && response.tool_calls.length > 0) {
       const toolCall = response.tool_calls[0];
       if (toolCall.name === "get_current_time") {
         messages.push(response);
         messages.push({ role: "tool", name: "get_current_time", content: new Date().toISOString() });
-        response = await env.AI.run(LLM_MODEL, { messages, tools, response_format: { type: "json_object" } });
+        response = await env.AI.run(LLM_MODEL, { messages, tools });
       }
     }
     return (response.response || "").trim();
@@ -144,30 +144,23 @@ async function handleAsk(request, env) {
   // 3) Build the context block from the reranked chunks
   const context = ordered.map((m, i) => `[${i + 1}] ${m.metadata.text}`).join("\n\n");
 
-  // 4) Prompt engineering: force the model to answer ONLY from the context in JSON
+  // 4) Prompt engineering: force the model to answer ONLY from the context
   const messages = [
     {
       role: "system",
       content:
-        "Respond only in valid JSON with keys: \"answer\", \"sources\" (array of strings), \"confidence_score\". " +
-        "Answer using ONLY the context provided. If the answer is not in the context, say you don't know — never make anything up. " +
+        "You are a helpful assistant. Answer the question using ONLY the context provided. " +
+        "If the answer is not in the context, say you don't know — never make anything up. " +
         "Be concise and reply in the same language as the question.",
     },
     { role: "user", content: `Context:\n${context}\n\nQuestion: ${question}` },
   ];
 
-  const rawAnswer = await aiAnswer(env, messages);
-  let parsed;
-  try {
-    parsed = JSON.parse(rawAnswer);
-  } catch (e) {
-    parsed = { answer: rawAnswer, sources: [], confidence_score: 0.0 };
-  }
+  const answer = await aiAnswer(env, messages);
 
   return json({
-    answer: parsed.answer || rawAnswer,
-    sources: parsed.sources && parsed.sources.length ? parsed.sources : [...new Set(ordered.map((m) => m.metadata.source))],
-    confidence_score: parsed.confidence_score ?? null,
+    answer,
+    sources: [...new Set(ordered.map((m) => m.metadata.source))],
     matches: ordered.map((m) => ({ score: m.score, rerankScore: m.rerankScore, source: m.metadata.source })),
   });
 }
