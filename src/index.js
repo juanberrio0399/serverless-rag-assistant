@@ -6,7 +6,7 @@
 //   POST /ask      → { question }      : retrieve relevant chunks → LLM answer  (Module 4)
 
 const EMBED_MODEL = "@cf/baai/bge-base-en-v1.5";      // 768-dim embeddings
-const LLM_MODEL = "@cf/meta/llama-3.1-8b-instruct";   // answering model (supports tool use)
+const LLM_MODEL = "@cf/meta/llama-3.2-11b-vision-instruct";   // answering model (supports vision & tool use)
 const RERANK_MODEL = "@cf/baai/bge-reranker-base";    // cross-encoder reranker (query↔chunk relevance)
 const MIN_RERANK_SCORE = 0.4;                          // drop weakly-relevant chunks after reranking
 
@@ -19,7 +19,7 @@ async function aiAnswer(env, messages) {
   }];
 
   try {
-    let response = await env.AI.run(LLM_MODEL, { messages, tools, response_format: { type: "json_object" } });
+    let response = await env.AI.run(LLM_MODEL, { messages, tools });
     if (response.tool_calls && response.tool_calls.length > 0) {
       const toolCall = response.tool_calls[0];
       if (toolCall.name === "get_current_time") {
@@ -96,7 +96,7 @@ async function handleAsk(request, env) {
     }
   }
 
-  const { question, topK = 5 } = await request.json().catch(() => ({}));
+  const { question, image, topK = 5 } = await request.json().catch(() => ({}));
   if (!question) return json({ error: "Missing 'question' in body." }, 400);
 
   // 1) Embed the question with the SAME model used at ingestion
@@ -145,15 +145,33 @@ async function handleAsk(request, env) {
   const context = ordered.map((m, i) => `[${i + 1}] ${m.metadata.text}`).join("\n\n");
 
   // 4) Prompt engineering: force the model to answer ONLY from the context in JSON
+  let userContent = `Context:\n${context}\n\nQuestion: ${question}`;
+  if (image) {
+    try {
+      const base64Data = image.includes(",") ? image.split(",")[1] : image;
+      const binaryString = atob(base64Data);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      userContent = [
+        { type: "text", text: userContent },
+        { type: "image", image: [...bytes] }
+      ];
+    } catch (err) {
+      console.error("Image parsing error:", err.message);
+    }
+  }
+
   const messages = [
     {
       role: "system",
       content:
         "Respond only in valid JSON with keys: \"answer\", \"sources\" (array of strings), \"confidence_score\". " +
-        "Answer using ONLY the context provided. If the answer is not in the context, say you don't know — never make anything up. " +
+        "Answer using ONLY the context provided and the attached image if any. If the answer is not in the context or image, say you don't know — never make anything up. " +
         "Be concise and reply in the same language as the question.",
     },
-    { role: "user", content: `Context:\n${context}\n\nQuestion: ${question}` },
+    { role: "user", content: userContent },
   ];
 
   const rawAnswer = await aiAnswer(env, messages);
@@ -204,6 +222,7 @@ button.ask:hover{background:#1843b8}
   <p class="label" data-en="This demo is preloaded with a short profile. Select an example question:" data-es="Esta demostracion trae cargado un perfil breve. Selecciona una pregunta de ejemplo:">This demo is preloaded with a short profile. Select an example question:</p>
   <div class="chips" id="chips"></div>
   <textarea id="q"></textarea>
+  <div style="margin-top:8px"><label style="font-size:13px;color:var(--mut);display:block;margin-bottom:4px" data-en="Attach image (optional):" data-es="Adjuntar imagen (opcional):">Attach image (optional):</label><input type="file" id="imgFile" accept="image/*" style="font-size:13px"></div>
   <button class="ask" onclick="ask()" data-en="Get answer" data-es="Obtener respuesta">Get answer</button>
   <div class="out" id="out" data-en="The answer will appear here, with its source document." data-es="La respuesta aparecera aqui, con su documento fuente.">The answer will appear here, with its source document.</div>
   <p class="foot"><span data-en="Designed and built by Juan Berrio, Cloud &amp; Data Engineer. Source code:" data-es="Disenado y construido por Juan Berrio, Cloud &amp; Data Engineer. Codigo fuente:">Designed and built by Juan Berrio, Cloud &amp; Data Engineer. Source code:</span> <a href="https://github.com/juanberrio0399/serverless-rag-assistant" target="_blank">GitHub</a></p>
@@ -212,7 +231,14 @@ button.ask:hover{background:#1843b8}
 var EX={en:["How many records does DataForge process?","What technologies does DataForge use?","How often does DataForge run?"],es:["Cuantos registros procesa DataForge?","Que tecnologias usa DataForge?","Cada cuanto se ejecuta DataForge?"]};
 function chips(l){var c=document.getElementById("chips");c.innerHTML="";EX[l].forEach(function(t){var b=document.createElement("span");b.className="chip";b.textContent=t;b.onclick=function(){document.getElementById("q").value=t};c.appendChild(b)})}
 function L(l){document.documentElement.lang=l;document.querySelectorAll("[data-en]").forEach(function(e){var v=e.getAttribute("data-"+l);if(v)e.textContent=v});document.getElementById("bEN").classList.toggle("on",l==="en");document.getElementById("bES").classList.toggle("on",l==="es");chips(l);document.getElementById("q").value=EX[l][0]}
-async function ask(){var q=document.getElementById("q").value.trim(),o=document.getElementById("out");if(!q)return;o.textContent="...";try{var r=await fetch("/ask",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({question:q})});var d=await r.json();o.textContent=(d.answer||d.error||"-")+(d.sources&&d.sources.length?"   ["+d.sources.join(", ")+"]":"")}catch(e){o.textContent="Error: "+e.message}}
+async function ask(){var q=document.getElementById("q").value.trim(),o=document.getElementById("out"),f=document.getElementById("imgFile").files[0];if(!q)return;o.textContent="...";
+var payload={question:q};
+if(f){
+  var reader=new FileReader();
+  reader.onload=async function(e){payload.image=e.target.result;await sendAsk(payload,o);};
+  reader.readAsDataURL(f);
+}else{await sendAsk(payload,o);}}
+async function sendAsk(payload,o){try{var r=await fetch("/ask",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(payload)});var d=await r.json();o.textContent=(d.answer||d.error||"-")+(d.sources&&d.sources.length?"   ["+d.sources.join(", ")+"]":"")}catch(e){o.textContent="Error: "+e.message}}
 L("en");
 </script></body></html>`;
 
