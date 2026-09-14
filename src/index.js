@@ -7,25 +7,33 @@
 
 const EMBED_MODEL = "@cf/baai/bge-base-en-v1.5";      // 768-dim embeddings
 const LLM_MODEL = "@cf/meta/llama-3.1-8b-instruct";   // answering model (supports tool use)
+const VISION_MODEL = "@cf/meta/llama-3.2-11b-vision-instruct";
 const RERANK_MODEL = "@cf/baai/bge-reranker-base";    // cross-encoder reranker (query↔chunk relevance)
 const MIN_RERANK_SCORE = 0.4;                          // drop weakly-relevant chunks after reranking
 
 // aiAnswer — Workers AI (free) with a Groq fallback (free, GROQ_API_KEY Worker secret) for quota resilience.
-async function aiAnswer(env, messages) {
-  const tools = [{
+async function aiAnswer(env, messages, imageBytes = null) {
+  const modelToUse = imageBytes ? VISION_MODEL : LLM_MODEL;
+  const tools = imageBytes ? [] : [{
     name: "get_current_time",
     description: "Get the current date and time",
     parameters: { type: "object", properties: {}, required: [] }
   }];
 
   try {
-    let response = await env.AI.run(LLM_MODEL, { messages, tools });
-    if (response.tool_calls && response.tool_calls.length > 0) {
+    const inputPayload = { messages };
+    if (imageBytes) {
+      inputPayload.image = Array.from(imageBytes);
+    } else {
+      inputPayload.tools = tools;
+    }
+    let response = await env.AI.run(modelToUse, inputPayload);
+    if (!imageBytes && response.tool_calls && response.tool_calls.length > 0) {
       const toolCall = response.tool_calls[0];
       if (toolCall.name === "get_current_time") {
         messages.push(response);
         messages.push({ role: "tool", name: "get_current_time", content: new Date().toISOString() });
-        response = await env.AI.run(LLM_MODEL, { messages, tools });
+        response = await env.AI.run(modelToUse, inputPayload);
       }
     }
     return (response.response || "").trim();
@@ -96,8 +104,21 @@ async function handleAsk(request, env) {
     }
   }
 
-  const { question, topK = 5 } = await request.json().catch(() => ({}));
+  const { question, topK = 5, image } = await request.json().catch(() => ({}));
   if (!question) return json({ error: "Missing 'question' in body." }, 400);
+
+  let imageBytes = null;
+  if (image) {
+    try {
+      const binaryString = atob(image);
+      imageBytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        imageBytes[i] = binaryString.charCodeAt(i);
+      }
+    } catch (e) {
+      return json({ error: "Invalid base64 in 'image'." }, 400);
+    }
+  }
 
   // 1) Embed the question with the SAME model used at ingestion
   const { data } = await env.AI.run(EMBED_MODEL, { text: [question] });
@@ -156,7 +177,7 @@ async function handleAsk(request, env) {
     { role: "user", content: `Context:\n${context}\n\nQuestion: ${question}` },
   ];
 
-  const answer = await aiAnswer(env, messages);
+  const answer = await aiAnswer(env, messages, imageBytes);
 
   return json({
     answer,
