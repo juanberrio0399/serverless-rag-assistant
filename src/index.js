@@ -10,20 +10,27 @@
 import { EMBED_MODEL, ingestText, cleanSource, parseTargetUrl, fetchReadable, checkIngestToken, isRateLimited } from "./ingest.js";
 import { wantsReasoning, reasoningAnswer } from "./reasoning.js";
 
-const LLM_MODEL = "@cf/meta/llama-3.1-8b-instruct";   // answering model (supports tool use)
+// Answering model (supports tool use). llama-3.1-8b-instruct was deprecated on 2026-05-30 and every call failed,
+// which left the fast mode answering with an empty string.
+export const LLM_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
 const RERANK_MODEL = "@cf/baai/bge-reranker-base";    // cross-encoder reranker (query↔chunk relevance)
 const MIN_RERANK_SCORE = 0.4;                          // drop weakly-relevant chunks after reranking
 
 // aiAnswer — Workers AI (free) with a Groq fallback (free, GROQ_API_KEY Worker secret) for quota resilience.
+const TIME_QUESTION = /\b(time|date|today|now|hora|fecha|hoy|ahora)\b/i;
+
 async function aiAnswer(env, messages) {
-  const tools = [{
+  // Offer the clock tool only when the question is about the date or time: with tools always attached,
+  // llama-3.3 answers ordinary questions with "I don't know the function to call".
+  const question = messages.at(-1)?.content?.split("Question:").pop() ?? "";
+  const tools = TIME_QUESTION.test(question) ? [{
     name: "get_current_time",
     description: "Get the current date and time",
     parameters: { type: "object", properties: {}, required: [] }
-  }];
+  }] : undefined;
 
   try {
-    let response = await env.AI.run(LLM_MODEL, { messages, tools });
+    let response = await env.AI.run(LLM_MODEL, tools ? { messages, tools } : { messages });
     if (response.tool_calls && response.tool_calls.length > 0) {
       const toolCall = response.tool_calls[0];
       if (toolCall.name === "get_current_time") {
@@ -164,14 +171,23 @@ async function handleAsk(request, env) {
   ];
 
   // 5) Opt-in reasoning mode; if R1 fails or runs out of tokens, answer with the fast model instead.
-  const reasoned = reasoning ? await reasoningAnswer(env, messages) : null;
-  const answer = reasoned ? reasoned.answer : await aiAnswer(env, messages);
+  let reasoned = reasoning ? await reasoningAnswer(env, messages) : null;
+  let answer = reasoned ? reasoned.answer : await aiAnswer(env, messages);
+
+  // 6) If the fast model returned nothing (outage, deprecated model), try the reasoning model before
+  //    handing back a blank answer.
+  let rescued = false;
+  if (!answer && !reasoning) {
+    reasoned = await reasoningAnswer(env, messages);
+    if (reasoned) { answer = reasoned.answer; rescued = true; }
+  }
 
   return json({
     answer,
     mode: reasoned ? "reasoning" : "fast",
     ...(reasoned ? { reasoning: reasoned.reasoning } : {}),
-    ...(reasoning && !reasoned ? { fallback: true } : {}),
+    ...((reasoning && !reasoned) || rescued ? { fallback: true } : {}),
+    ...(answer ? {} : { error: "No model returned an answer. Please try again in a moment." }),
     sources: [...new Set(ordered.map((m) => m.metadata.source))],
     matches: ordered.map((m) => ({ score: m.score, rerankScore: m.rerankScore, source: m.metadata.source })),
   });
