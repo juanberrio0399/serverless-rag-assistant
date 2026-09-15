@@ -4,10 +4,15 @@
 //   GET  /            → demo page
 //   POST /ingest      → { text, source } : chunk → embed → store in Vectorize        (Bearer INGEST_TOKEN)
 //   POST /ingest-url  → { url, source? } : Jina Reader → Markdown → same ingestion    (Bearer INGEST_TOKEN)
-//   POST /ask         → { question, reasoning? } : retrieve relevant chunks → LLM answer
+//   POST /ingest-jobs → { text | url, source? } : large documents, durable Workflow → 202 { id }  (Bearer INGEST_TOKEN)
+//   GET  /ingest-jobs/<id> → job status and result                                  (Bearer INGEST_TOKEN)
+//   POST /ask         → { question, reasoning?, conversationId? } : retrieve relevant chunks → LLM answer
 //                        (reasoning: true or ?reasoning=true → DeepSeek-R1 thinks first; slower, opt-in)
+//
+// Entry point for wrangler is src/worker.js, which also exports the IngestWorkflow class.
 
 import { EMBED_MODEL, ingestText, cleanSource, parseTargetUrl, fetchReadable, checkIngestToken, isRateLimited } from "./ingest.js";
+import { parseJobRequest, jobView, JOB_ID_PATTERN } from "./ingest-jobs.js";
 import { wantsReasoning, reasoningAnswer } from "./reasoning.js";
 import { resolveConversationId, loadHistory, saveTurn, retrievalQuery } from "./memory.js";
 
@@ -99,6 +104,40 @@ async function handleIngestUrl(request, env) {
   const src = cleanSource(body.source, target.url);
   const result = await ingestText(env, page.text, src);
   return json({ ok: true, url: target.url, source: src, ...result, note: INDEXING_NOTE });
+}
+
+// POST /ingest-jobs  — large documents: start a durable IngestWorkflow and return its id right away
+async function handleIngestJob(request, env) {
+  const denied = await guardIngest(request, env);
+  if (denied) return denied;
+  if (!env.INGEST_WORKFLOW) return json({ error: "Large-document ingestion is not configured." }, 503);
+
+  const job = parseJobRequest(await request.json().catch(() => ({})));
+  if (job.error) return json({ error: job.error }, job.status);
+
+  const instance = await env.INGEST_WORKFLOW.create({ params: job.params });
+  return json({
+    ok: true,
+    ...jobView(instance.id, await instance.status()),
+    statusUrl: `/ingest-jobs/${instance.id}`,
+    note: INDEXING_NOTE,
+  }, 202);
+}
+
+// GET /ingest-jobs/<id>  — progress of a large-document job
+async function handleIngestJobStatus(request, env, id) {
+  const denied = await guardIngest(request, env);
+  if (denied) return denied;
+  if (!env.INGEST_WORKFLOW) return json({ error: "Large-document ingestion is not configured." }, 503);
+  if (!JOB_ID_PATTERN.test(id)) return json({ error: "Invalid job id." }, 400);
+
+  let instance;
+  try {
+    instance = await env.INGEST_WORKFLOW.get(id);
+  } catch {
+    return json({ error: "Job not found." }, 404);
+  }
+  return json(jobView(id, await instance.status()));
 }
 
 // POST /ask  — answer a question grounded ONLY in the ingested documents
@@ -268,6 +307,12 @@ export default {
 
     if (request.method === "POST" && url.pathname === "/ingest") {
       return await handleIngest(request, env);
+    }
+    if (request.method === "POST" && url.pathname === "/ingest-jobs") {
+      return await handleIngestJob(request, env);
+    }
+    if (request.method === "GET" && url.pathname.startsWith("/ingest-jobs/")) {
+      return await handleIngestJobStatus(request, env, url.pathname.slice("/ingest-jobs/".length));
     }
     if (request.method === "POST" && url.pathname === "/ingest-url") {
       return await handleIngestUrl(request, env);

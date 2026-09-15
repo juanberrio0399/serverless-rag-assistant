@@ -35,6 +35,7 @@ Docs →  trozos → embeddings → Vectorize   |  pregunta → embedding → Ve
 | Base vectorial | **Vectorize** | guarda y busca los vectores |
 | Almacenamiento | **R2** | guarda los documentos originales |
 | Memoria de conversación | **D1** (opcional) | últimos 5 turnos por conversación, retención de 7 días |
+| Ingesta de documentos grandes | **Workflows** | vectorización durable por pasos, con reintentos |
 
 ## Tecnologías / habilidades demostradas
 
@@ -86,6 +87,22 @@ El razonamiento es opcional porque es más lento y costoso: en pruebas, una resp
 
 Los endpoints de ingesta tienen rate limit por IP, solo aceptan páginas públicas http(s) e indexan como máximo 100 fragmentos (~80 mil caracteres) por petición (`truncated: true` si la página es más larga). Se activan con `wrangler secret put INGEST_TOKEN`; sin el secreto responden 503.
 
+### Documentos grandes (Cloudflare Workflows)
+
+Para páginas o textos que superan el tope de 100 fragmentos, `POST /ingest-jobs` inicia un **Workflow** durable y responde `202` con un id de trabajo. El trabajo lee la página (si es por URL) y luego vectoriza y guarda en lotes de 50 fragmentos; cada lote es un paso que se reintenta con backoff exponencial, así un error de Workers AI o Vectorize no reinicia todo el documento. Los ids de los vectores salen del trabajo y la posición del fragmento, por lo que un lote reintentado sobrescribe sus propios vectores en vez de duplicarlos. Un trabajo indexa hasta 625 fragmentos (~500 mil caracteres, el tope de Jina Reader); el texto enviado directo tiene un máximo de 900 KiB (el payload de un Workflow está limitado a 1 MiB). Mismo token y rate limit que los otros endpoints de ingesta. En el plan Workers Free el estado de un trabajo terminado se conserva 3 días.
+
+```bash
+curl -X POST https://serverless-rag-assistant.tienvo.workers.dev/ingest-jobs \
+  -H "authorization: Bearer $INGEST_TOKEN" \
+  -H "content-type: application/json" \
+  -d '{"url":"https://developers.cloudflare.com/workflows/"}'
+# → 202 {"id":"…","status":"queued","statusUrl":"/ingest-jobs/…"}
+
+curl https://serverless-rag-assistant.tienvo.workers.dev/ingest-jobs/<id> \
+  -H "authorization: Bearer $INGEST_TOKEN"
+# → {"id":"…","status":"complete","result":{"chunks":412,"totalChunks":412,"truncated":false,…}}
+```
+
 ### Memoria de conversación (D1)
 
 Con el binding opcional `DB` (Cloudflare D1), `/ask` recuerda los **últimos 5 turnos de pregunta y respuesta** de una conversación, así funcionan seguimientos como "¿y cada cuánto se ejecuta?". Cada respuesta devuelve un `conversationId`; reenvíalo en la siguiente petición (la página demo lo hace durante la sesión de la página). Sin id empieza una conversación nueva; un id mal formado devuelve 400. Sin el binding, o si D1 no está disponible, `/ask` sigue sin estado y responde como antes.
@@ -110,7 +127,7 @@ En CI corren dos suites en cada push y pull request:
 | Suite | Comando | Qué cubre |
 |---|---|---|
 | Unitarias | `npm run test:unit` | `node:test` con bindings falsos: fragmentación, validación de URL, lectura con Jina Reader, respaldos de modelo, modo razonamiento |
-| Runtime | `npm run test:workers` | Vitest dentro de **workerd** (`@cloudflare/vitest-plugin`) con los bindings de `wrangler.jsonc`: rutas, validación de `/ask`, autenticación de ingesta (401/503), el simulador local de rate limit (429), memoria de conversación sobre D1 local con las migraciones reales |
+| Runtime | `npm run test:workers` | Vitest dentro de **workerd** (`@cloudflare/vitest-plugin`) con los bindings de `wrangler.jsonc`: rutas, validación de `/ask`, autenticación de ingesta (401/503), el simulador local de rate limit (429), memoria de conversación sobre D1 local con las migraciones reales, el Workflow de ingesta de punta a punta (reintentos por paso, ids deterministas, endpoint de estado) |
 
 `npm test` corre ambas. Workers AI y Vectorize no tienen simulador local, así que la suite de runtime usa `remoteBindings: false` y los simula con `vi.spyOn`: las pruebas nunca tocan una cuenta de Cloudflare ni necesitan credenciales.
 
