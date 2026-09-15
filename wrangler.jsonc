@@ -4,7 +4,7 @@
   "$schema": "node_modules/wrangler/config-schema.json",
 
   "name": "serverless-rag-assistant",   // nombre del Worker en tu cuenta
-  "main": "src/index.js",               // el código que corre
+  "main": "src/worker.js",              // el código que corre (handler HTTP + clase del Workflow)
   "compatibility_date": "2026-08-01",   // "congela" el comportamiento del runtime
 
   // Binding a Workers AI → dentro del código lo usas como env.AI
@@ -35,6 +35,13 @@
   // "database_id" y aplica `npx wrangler d1 migrations apply rag-memory --remote` antes de desplegar.
   "d1_databases": [
     { "binding": "DB", "database_name": "rag-memory", "migrations_dir": "migrations" }
+  ],
+
+  // Ingesta durable de documentos grandes con Cloudflare Workflows → env.INGEST_WORKFLOW.
+  // POST /ingest-jobs crea una instancia; cada lote de 50 fragmentos es un paso con reintentos.
+  // Disponible en el plan gratis (10 ms de CPU por paso, 1 MiB de payload); se crea al desplegar.
+  "workflows": [
+    { "name": "rag-ingest", "binding": "INGEST_WORKFLOW", "class_name": "IngestWorkflow" }
   ]
 
   // (Más adelante agregamos R2 aquí para guardar los documentos originales.)

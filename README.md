@@ -40,6 +40,7 @@ extra storage) and over-retrieves candidates that a **cross-encoder reranker**
 | Vector database | **Vectorize** | stores & searches the vectors |
 | Document storage | **R2** | holds the source files |
 | Conversation memory | **D1** (optional) | last 5 turns per conversation, 7-day retention |
+| Large-document ingestion | **Workflows** | durable, step-by-step embedding with retries |
 
 ## Tech / skills demonstrated
 
@@ -91,6 +92,22 @@ Reasoning is opt-in because it is slower and costlier: in testing, one reasoning
 
 Ingestion endpoints are rate limited per IP, accept only public http(s) pages, and index at most 100 chunks (~80k characters) per request (`truncated: true` when a page is longer). Enable them with `wrangler secret put INGEST_TOKEN`; without the secret they answer 503.
 
+### Large documents (Cloudflare Workflows)
+
+For pages or texts beyond the 100-chunk cap, `POST /ingest-jobs` starts a durable **Workflow** and answers `202` with a job id. The job reads the page (URL jobs), then embeds and stores it in batches of 50 chunks; each batch is a step retried with exponential backoff, so a Workers AI or Vectorize error does not restart the whole document. Vector ids are derived from the job and chunk position, so a retried batch overwrites its own vectors instead of duplicating them. A job indexes up to 625 chunks (~500k characters, the Jina Reader cap); text sent inline is limited to 900 KiB (Workflow payloads are capped at 1 MiB). Same token and rate limit as the other ingestion endpoints. Completed job status is kept for 3 days on the Workers Free plan.
+
+```bash
+curl -X POST https://serverless-rag-assistant.tienvo.workers.dev/ingest-jobs \
+  -H "authorization: Bearer $INGEST_TOKEN" \
+  -H "content-type: application/json" \
+  -d '{"url":"https://developers.cloudflare.com/workflows/"}'
+# → 202 {"id":"…","status":"queued","statusUrl":"/ingest-jobs/…"}
+
+curl https://serverless-rag-assistant.tienvo.workers.dev/ingest-jobs/<id> \
+  -H "authorization: Bearer $INGEST_TOKEN"
+# → {"id":"…","status":"complete","result":{"chunks":412,"totalChunks":412,"truncated":false,…}}
+```
+
 ### Conversation memory (D1)
 
 With the optional `DB` binding (Cloudflare D1), `/ask` remembers the **last 5 question/answer turns** of a conversation, so follow-ups such as "and how often does it run?" work. Every answer returns a `conversationId`; send it back in the next request (the demo page does this for the current page session). Without an id a new conversation starts; a malformed id returns 400. Without the binding, or if D1 is unavailable, `/ask` stays stateless and answers as before.
@@ -115,7 +132,7 @@ Two suites run in CI on every push and pull request:
 | Suite | Command | What it covers |
 |---|---|---|
 | Unit | `npm run test:unit` | `node:test` with fake bindings: chunking, URL validation, Jina Reader parsing, model fallbacks, reasoning mode |
-| Runtime | `npm run test:workers` | Vitest inside **workerd** (`@cloudflare/vitest-plugin`) with the bindings from `wrangler.jsonc`: routing, `/ask` validation, ingestion auth (401/503), the local rate-limiter simulator (429), conversation memory on local D1 with the real migrations |
+| Runtime | `npm run test:workers` | Vitest inside **workerd** (`@cloudflare/vitest-plugin`) with the bindings from `wrangler.jsonc`: routing, `/ask` validation, ingestion auth (401/503), the local rate-limiter simulator (429), conversation memory on local D1 with the real migrations, the ingestion Workflow end to end (step retries, deterministic ids, status endpoint) |
 
 `npm test` runs both. Workers AI and Vectorize have no local simulator, so the runtime suite sets `remoteBindings: false` and mocks them with `vi.spyOn`: tests never reach a Cloudflare account and need no credentials.
 
