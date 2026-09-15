@@ -34,6 +34,7 @@ Docs →  trozos → embeddings → Vectorize   |  pregunta → embedding → Ve
 | Modelos de IA | **Workers AI** | embeddings + el LLM que responde |
 | Base vectorial | **Vectorize** | guarda y busca los vectores |
 | Almacenamiento | **R2** | guarda los documentos originales |
+| Memoria de conversación | **D1** (opcional) | últimos 5 turnos por conversación, retención de 7 días |
 
 ## Tecnologías / habilidades demostradas
 
@@ -61,6 +62,11 @@ curl -X POST https://serverless-rag-assistant.tienvo.workers.dev/ask \
   -H "content-type: application/json" \
   -d '{"question":"..."}'
 
+# 2a) Seguimiento en la misma conversación: reenvía el conversationId de la respuesta anterior
+curl -X POST https://serverless-rag-assistant.tienvo.workers.dev/ask \
+  -H "content-type: application/json" \
+  -d '{"question":"¿Y cada cuánto se ejecuta?","conversationId":"<id de la respuesta anterior>"}'
+
 # 2b) Modo razonamiento (opcional): DeepSeek-R1 piensa antes de responder y devuelve su razonamiento
 curl -X POST "https://serverless-rag-assistant.tienvo.workers.dev/ask?reasoning=true" \
   -H "content-type: application/json" \
@@ -71,7 +77,7 @@ curl -X POST "https://serverless-rag-assistant.tienvo.workers.dev/ask?reasoning=
 
 | | `fast` (por defecto) | `reasoning` (`"reasoning": true` o `?reasoning=true`) |
 |---|---|---|
-| Modelo | `llama-3.1-8b-instruct` | `deepseek-r1-distill-qwen-32b` |
+| Modelo | `llama-3.3-70b-instruct-fp8-fast` | `deepseek-r1-distill-qwen-32b` |
 | Latencia | ~1-3 s | ~10-30 s |
 | Ideal para | consultas directas | preguntas que combinan varios datos |
 | Salida extra | — | `reasoning` (el paso a paso del modelo) |
@@ -79,6 +85,17 @@ curl -X POST "https://serverless-rag-assistant.tienvo.workers.dev/ask?reasoning=
 El razonamiento es opcional porque es más lento y costoso: en pruebas, una respuesta razonada tardó ~9 s y usó ~110 de las 10.000 neuronas gratis diarias de Workers AI. Si R1 falla o se queda sin tokens, `/ask` igual responde con el modelo rápido y agrega `fallback: true`.
 
 Los endpoints de ingesta tienen rate limit por IP, solo aceptan páginas públicas http(s) e indexan como máximo 100 fragmentos (~80 mil caracteres) por petición (`truncated: true` si la página es más larga). Se activan con `wrangler secret put INGEST_TOKEN`; sin el secreto responden 503.
+
+### Memoria de conversación (D1)
+
+Con el binding opcional `DB` (Cloudflare D1), `/ask` recuerda los **últimos 5 turnos de pregunta y respuesta** de una conversación, así funcionan seguimientos como "¿y cada cuánto se ejecuta?". Cada respuesta devuelve un `conversationId`; reenvíalo en la siguiente petición (la página demo lo hace durante la sesión de la página). Sin id empieza una conversación nueva; un id mal formado devuelve 400. Sin el binding, o si D1 no está disponible, `/ask` sigue sin estado y responde como antes.
+
+Privacidad y retención, porque la demo es pública:
+- Por mensaje se guarda: id de conversación, rol, texto (máximo 2.000 caracteres) y fecha. **Sin dirección IP**, user agent ni otros datos de la petición.
+- Los mensajes con más de **7 días** se borran en cada escritura, y cada conversación guarda como máximo 10 mensajes.
+- Quien tenga un `conversationId` puede continuar esa conversación: no compartas ids ni escribas datos personales en la demo.
+
+Configuración (una vez): `npx wrangler d1 create rag-memory`, pega el `database_id` que devuelve en `wrangler.jsonc` y luego `npx wrangler d1 migrations apply rag-memory --remote`.
 
 **Puntos clave:**
 - **Anti-alucinación** — responde "no sé" cuando la respuesta no está en tus documentos (guardarraíl por prompt engineering).
@@ -93,7 +110,7 @@ En CI corren dos suites en cada push y pull request:
 | Suite | Comando | Qué cubre |
 |---|---|---|
 | Unitarias | `npm run test:unit` | `node:test` con bindings falsos: fragmentación, validación de URL, lectura con Jina Reader, respaldos de modelo, modo razonamiento |
-| Runtime | `npm run test:workers` | Vitest dentro de **workerd** (`@cloudflare/vitest-plugin`) con los bindings de `wrangler.jsonc`: rutas, validación de `/ask`, autenticación de ingesta (401/503), el simulador local de rate limit (429) |
+| Runtime | `npm run test:workers` | Vitest dentro de **workerd** (`@cloudflare/vitest-plugin`) con los bindings de `wrangler.jsonc`: rutas, validación de `/ask`, autenticación de ingesta (401/503), el simulador local de rate limit (429), memoria de conversación sobre D1 local con las migraciones reales |
 
 `npm test` corre ambas. Workers AI y Vectorize no tienen simulador local, así que la suite de runtime usa `remoteBindings: false` y los simula con `vi.spyOn`: las pruebas nunca tocan una cuenta de Cloudflare ni necesitan credenciales.
 

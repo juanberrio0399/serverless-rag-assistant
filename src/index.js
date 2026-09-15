@@ -9,6 +9,7 @@
 
 import { EMBED_MODEL, ingestText, cleanSource, parseTargetUrl, fetchReadable, checkIngestToken, isRateLimited } from "./ingest.js";
 import { wantsReasoning, reasoningAnswer } from "./reasoning.js";
+import { resolveConversationId, loadHistory, saveTurn, retrievalQuery } from "./memory.js";
 
 // Answering model (supports tool use). llama-3.1-8b-instruct was deprecated on 2026-05-30 and every call failed,
 // which left the fast mode answering with an empty string.
@@ -101,7 +102,7 @@ async function handleIngestUrl(request, env) {
 }
 
 // POST /ask  — answer a question grounded ONLY in the ingested documents
-async function handleAsk(request, env) {
+async function handleAsk(request, env, ctx) {
   // 0) Rate limit /ask per client IP (protects free Workers AI quota from abuse).
   //    Optional binding: when RATE_LIMITER isn't configured the endpoint stays open.
   if (await isRateLimited(request, env, "ask")) {
@@ -113,8 +114,15 @@ async function handleAsk(request, env) {
   if (!question) return json({ error: "Missing 'question' in body." }, 400);
   const reasoning = wantsReasoning(body, new URL(request.url));
 
+  // 0b) Conversation memory (optional D1 binding): last turns of this conversation, oldest first.
+  const memory = env.DB ? resolveConversationId(body.conversationId) : null;
+  if (memory?.error) return json({ error: memory.error }, 400);
+  const history = memory ? await loadHistory(env.DB, memory.id) : [];
+  const conversation = memory ? { conversationId: memory.id } : {};
+  const query = retrievalQuery(question, history);
+
   // 1) Embed the question with the SAME model used at ingestion
-  const { data } = await env.AI.run(EMBED_MODEL, { text: [question] });
+  const { data } = await env.AI.run(EMBED_MODEL, { text: [query] });
 
   // 2) Retrieve a WIDER candidate pool than we finally use. Reranking only helps
   //    when it has extra candidates to promote/demote, so we over-retrieve here
@@ -123,7 +131,7 @@ async function handleAsk(request, env) {
   const results = await env.VECTORIZE.query(data[0], { topK: candidateK, returnMetadata: "all" });
   const matches = results.matches ?? [];
   if (matches.length === 0) {
-    return json({ answer: "No documents ingested yet — add some with /ingest first.", sources: [] });
+    return json({ answer: "No documents ingested yet — add some with /ingest first.", ...conversation, sources: [] });
   }
 
   // 2b) Rerank the candidates with a cross-encoder for true query↔chunk relevance
@@ -135,7 +143,7 @@ async function handleAsk(request, env) {
   let ordered = matches;
   try {
     const rr = await env.AI.run(RERANK_MODEL, {
-      query: question,
+      query,
       contexts: matches.map((m) => ({ text: m.metadata.text })),
     });
     const ranking = rr?.response;
@@ -165,8 +173,10 @@ async function handleAsk(request, env) {
       content:
         "You are a helpful assistant. Answer the question using ONLY the context provided. " +
         "If the answer is not in the context, say you don't know — never make anything up. " +
-        "Be concise and reply in the same language as the question.",
+        "Be concise and reply in the same language as the question." +
+        (history.length ? " Use the earlier turns of the conversation only to understand what the question refers to." : ""),
     },
+    ...history,
     { role: "user", content: `Context:\n${context}\n\nQuestion: ${question}` },
   ];
 
@@ -182,8 +192,15 @@ async function handleAsk(request, env) {
     if (reasoned) { answer = reasoned.answer; rescued = true; }
   }
 
+  // 7) Remember this turn after responding (only answered turns are stored).
+  if (memory && answer) {
+    const saving = saveTurn(env.DB, memory.id, question, answer);
+    if (ctx?.waitUntil) ctx.waitUntil(saving); else await saving;
+  }
+
   return json({
     answer,
+    ...conversation,
     mode: reasoned ? "reasoning" : "fast",
     ...(reasoned ? { reasoning: reasoned.reasoning } : {}),
     ...((reasoning && !reasoned) || rescued ? { fallback: true } : {}),
@@ -239,12 +256,13 @@ button.ask:hover{background:#1843b8}
 var EX={en:["How many records does DataForge process?","What technologies does DataForge use?","How often does DataForge run?"],es:["Cuantos registros procesa DataForge?","Que tecnologias usa DataForge?","Cada cuanto se ejecuta DataForge?"]};
 function chips(l){var c=document.getElementById("chips");c.innerHTML="";EX[l].forEach(function(t){var b=document.createElement("span");b.className="chip";b.textContent=t;b.onclick=function(){document.getElementById("q").value=t};c.appendChild(b)})}
 function L(l){document.documentElement.lang=l;document.querySelectorAll("[data-en]").forEach(function(e){var v=e.getAttribute("data-"+l);if(v)e.textContent=v});document.getElementById("bEN").classList.toggle("on",l==="en");document.getElementById("bES").classList.toggle("on",l==="es");chips(l);document.getElementById("q").value=EX[l][0]}
-async function ask(){var q=document.getElementById("q").value.trim(),o=document.getElementById("out"),w=document.getElementById("why"),rs=document.getElementById("rsn").checked;if(!q)return;o.textContent=rs?"... (reasoning, ~10-30 s)":"...";w.hidden=true;try{var r=await fetch("/ask",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({question:q,reasoning:rs})});var d=await r.json();o.textContent=(d.answer||d.error||"-")+(d.sources&&d.sources.length?"   ["+d.sources.join(", ")+"]":"")+(d.fallback?"   (reasoning unavailable, fast answer)":"");if(d.reasoning){document.getElementById("whyTxt").textContent=d.reasoning;w.hidden=false}}catch(e){o.textContent="Error: "+e.message}}
+var CID;
+async function ask(){var q=document.getElementById("q").value.trim(),o=document.getElementById("out"),w=document.getElementById("why"),rs=document.getElementById("rsn").checked;if(!q)return;o.textContent=rs?"... (reasoning, ~10-30 s)":"...";w.hidden=true;try{var r=await fetch("/ask",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({question:q,reasoning:rs,conversationId:CID})});var d=await r.json();if(d.conversationId)CID=d.conversationId;o.textContent=(d.answer||d.error||"-")+(d.sources&&d.sources.length?"   ["+d.sources.join(", ")+"]":"")+(d.fallback?"   (reasoning unavailable, fast answer)":"");if(d.reasoning){document.getElementById("whyTxt").textContent=d.reasoning;w.hidden=false}}catch(e){o.textContent="Error: "+e.message}}
 L("en");
 </script></body></html>`;
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
    try {
     const url = new URL(request.url);
 
@@ -255,7 +273,7 @@ export default {
       return await handleIngestUrl(request, env);
     }
     if (request.method === "POST" && url.pathname === "/ask") {
-      return await handleAsk(request, env);
+      return await handleAsk(request, env, ctx);
     }
 
     return new Response(INDEX_HTML, { headers: { "content-type": "text/html; charset=utf-8" } });
