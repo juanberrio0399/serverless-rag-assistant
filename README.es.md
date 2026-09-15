@@ -37,7 +37,7 @@ Docs →  trozos → embeddings → Vectorize   |  pregunta → embedding → Ve
 
 ## Tecnologías / habilidades demostradas
 
-`Cloudflare Workers` · `Workers AI` · `Vectorize` · `R2` · `RAG` · `Integración de LLM` · `embeddings` · `Infraestructura como código (wrangler)` · `serverless` · `CI/CD`
+`Cloudflare Workers` · `Workers AI` · `Vectorize` · `R2` · `RAG` · `Modelos de razonamiento (DeepSeek-R1)` · `Integración de LLM` · `embeddings` · `Infraestructura como código (wrangler)` · `serverless` · `CI/CD`
 
 ## Demo en vivo
 
@@ -60,7 +60,23 @@ curl -X POST https://serverless-rag-assistant.tienvo.workers.dev/ingest-url \
 curl -X POST https://serverless-rag-assistant.tienvo.workers.dev/ask \
   -H "content-type: application/json" \
   -d '{"question":"..."}'
+
+# 2b) Modo razonamiento (opcional): DeepSeek-R1 piensa antes de responder y devuelve su razonamiento
+curl -X POST "https://serverless-rag-assistant.tienvo.workers.dev/ask?reasoning=true" \
+  -H "content-type: application/json" \
+  -d '{"question":"..."}'
 ```
+
+**Dos modos de respuesta**: la respuesta indica cuál corrió (`mode`).
+
+| | `fast` (por defecto) | `reasoning` (`"reasoning": true` o `?reasoning=true`) |
+|---|---|---|
+| Modelo | `llama-3.1-8b-instruct` | `deepseek-r1-distill-qwen-32b` |
+| Latencia | ~1-3 s | ~10-30 s |
+| Ideal para | consultas directas | preguntas que combinan varios datos |
+| Salida extra | — | `reasoning` (el paso a paso del modelo) |
+
+El razonamiento es opcional porque es más lento y costoso: en pruebas, una respuesta razonada tardó ~9 s y usó ~110 de las 10.000 neuronas gratis diarias de Workers AI. Si R1 falla o se queda sin tokens, `/ask` igual responde con el modelo rápido y agrega `fallback: true`.
 
 Los endpoints de ingesta tienen rate limit por IP, solo aceptan páginas públicas http(s) e indexan como máximo 100 fragmentos (~80 mil caracteres) por petición (`truncated: true` si la página es más larga). Se activan con `wrangler secret put INGEST_TOKEN`; sin el secreto responden 503.
 
