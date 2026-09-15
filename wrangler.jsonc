@@ -15,8 +15,12 @@
     { "binding": "VECTORIZE", "index_name": "rag-index" }
   ],
 
-  // Rate limiting nativo de Cloudflare (gratis, sin KV) para proteger /ask del abuso.
-  // Dentro del código lo usas como env.RATE_LIMITER. 20 peticiones cada 60s por IP.
+  // Rate limiting nativo de Cloudflare (gratis, sin KV) para proteger /ask, /ingest e /ingest-url del abuso.
+  // Dentro del código lo usas como env.RATE_LIMITER. 20 peticiones cada 60s por IP, contadas aparte
+  // para preguntas ("ask:<ip>") e ingesta ("ingest:<ip>").
+  //
+  // Secreto requerido para ingestar (no va en este archivo): wrangler secret put INGEST_TOKEN
+  // Sin ese secreto /ingest e /ingest-url responden 503 (la ingesta queda cerrada).
   "ratelimits": [
     {
       "name": "RATE_LIMITER",

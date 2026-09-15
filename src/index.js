@@ -1,11 +1,13 @@
 // Serverless RAG Assistant — Cloudflare Worker
 // -------------------------------------------------
 // Endpoints:
-//   GET  /         → service info
-//   POST /ingest   → { text, source } : chunk → embed → store in Vectorize
-//   POST /ask      → { question }      : retrieve relevant chunks → LLM answer  (Module 4)
+//   GET  /            → demo page
+//   POST /ingest      → { text, source } : chunk → embed → store in Vectorize        (Bearer INGEST_TOKEN)
+//   POST /ingest-url  → { url, source? } : Jina Reader → Markdown → same ingestion    (Bearer INGEST_TOKEN)
+//   POST /ask         → { question }     : retrieve relevant chunks → LLM answer
 
-const EMBED_MODEL = "@cf/baai/bge-base-en-v1.5";      // 768-dim embeddings
+import { EMBED_MODEL, ingestText, cleanSource, parseTargetUrl, fetchReadable, checkIngestToken, isRateLimited } from "./ingest.js";
+
 const LLM_MODEL = "@cf/meta/llama-3.1-8b-instruct";   // answering model (supports tool use)
 const RERANK_MODEL = "@cf/baai/bge-reranker-base";    // cross-encoder reranker (query↔chunk relevance)
 const MIN_RERANK_SCORE = 0.4;                          // drop weakly-relevant chunks after reranking
@@ -38,62 +40,63 @@ async function aiAnswer(env, messages) {
   }
   return "";
 }
-const CHUNK_SIZE = 800;                                // characters per chunk
-
-// Split raw text into fixed-size chunks (small enough for good retrieval).
-function chunkText(text, size = CHUNK_SIZE) {
-  const clean = text.replace(/\s+/g, " ").trim();
-  const chunks = [];
-  for (let i = 0; i < clean.length; i += size) {
-    chunks.push(clean.slice(i, i + size));
-  }
-  return chunks;
-}
-
-function json(data, status = 200) {
+function json(data, status = 200, headers = {}) {
   return new Response(JSON.stringify(data, null, 2), {
     status,
-    headers: { "content-type": "application/json; charset=utf-8" },
+    headers: { "content-type": "application/json; charset=utf-8", ...headers },
   });
+}
+
+const INDEXING_NOTE = "Vectors take ~5-10s to become queryable (distributed index).";
+
+// Ingestion changes what the public demo answers, so it is rate limited and requires the owner's token.
+async function guardIngest(request, env) {
+  if (await isRateLimited(request, env, "ingest")) {
+    return json({ error: "Rate limit exceeded. Please try again later." }, 429);
+  }
+  const auth = await checkIngestToken(request, env);
+  if (auth === "disabled") return json({ error: "Ingestion is disabled. Set the INGEST_TOKEN secret to enable it." }, 503);
+  if (auth !== "ok") return json({ error: "Missing or invalid token." }, 401, { "www-authenticate": "Bearer" });
+  return null;
 }
 
 // POST /ingest  — teach the assistant a document
 async function handleIngest(request, env) {
-  const { text, source = "manual" } = await request.json().catch(() => ({}));
-  if (!text) return json({ error: "Missing 'text' in body." }, 400);
+  const denied = await guardIngest(request, env);
+  if (denied) return denied;
 
-  // 1) Break the document into chunks
-  const chunks = chunkText(text);
+  const { text, source } = await request.json().catch(() => ({}));
+  if (typeof text !== "string" || !text.trim()) return json({ error: "Missing 'text' in body." }, 400);
 
-  // 2) Turn every chunk into an embedding (one AI call for the whole batch)
-  const { data: vectors } = await env.AI.run(EMBED_MODEL, { text: chunks });
+  const src = cleanSource(source);
+  const result = await ingestText(env, text, src);
+  return json({ ok: true, source: src, ...result, note: INDEXING_NOTE });
+}
 
-  // 3) Store each vector in Vectorize, keeping the chunk text as metadata
-  const toInsert = chunks.map((chunk, i) => ({
-    id: crypto.randomUUID(),
-    values: vectors[i],
-    metadata: { text: chunk, source },
-  }));
-  await env.VECTORIZE.insert(toInsert);
+// POST /ingest-url  — teach the assistant a web page (read as Markdown through Jina Reader)
+async function handleIngestUrl(request, env) {
+  const denied = await guardIngest(request, env);
+  if (denied) return denied;
 
-  return json({
-    ok: true,
-    source,
-    chunks: chunks.length,
-    note: "Vectors take ~5-10s to become queryable (distributed index).",
-  });
+  const body = await request.json().catch(() => ({}));
+  const target = parseTargetUrl(body.url);
+  if (target.error) return json({ error: target.error }, 400);
+
+  const page = await fetchReadable(target.url);
+  if (page.error) return json({ error: page.error }, page.status);
+  if (!page.text.replace(/^# .*$/m, "").trim()) return json({ error: "The page has no readable text." }, 422);
+
+  const src = cleanSource(body.source, target.url);
+  const result = await ingestText(env, page.text, src);
+  return json({ ok: true, url: target.url, source: src, ...result, note: INDEXING_NOTE });
 }
 
 // POST /ask  — answer a question grounded ONLY in the ingested documents
 async function handleAsk(request, env) {
   // 0) Rate limit /ask per client IP (protects free Workers AI quota from abuse).
   //    Optional binding: when RATE_LIMITER isn't configured the endpoint stays open.
-  if (env.RATE_LIMITER) {
-    const ip = request.headers.get("cf-connecting-ip") || "anonymous";
-    const { success } = await env.RATE_LIMITER.limit({ key: ip });
-    if (!success) {
-      return json({ error: "Rate limit exceeded. Please try again later." }, 429);
-    }
+  if (await isRateLimited(request, env, "ask")) {
+    return json({ error: "Rate limit exceeded. Please try again later." }, 429);
   }
 
   const { question, topK = 5 } = await request.json().catch(() => ({}));
@@ -216,6 +219,9 @@ export default {
 
     if (request.method === "POST" && url.pathname === "/ingest") {
       return await handleIngest(request, env);
+    }
+    if (request.method === "POST" && url.pathname === "/ingest-url") {
+      return await handleIngestUrl(request, env);
     }
     if (request.method === "POST" && url.pathname === "/ask") {
       return await handleAsk(request, env);
