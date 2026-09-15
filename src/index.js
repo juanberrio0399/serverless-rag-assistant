@@ -4,9 +4,11 @@
 //   GET  /            → demo page
 //   POST /ingest      → { text, source } : chunk → embed → store in Vectorize        (Bearer INGEST_TOKEN)
 //   POST /ingest-url  → { url, source? } : Jina Reader → Markdown → same ingestion    (Bearer INGEST_TOKEN)
-//   POST /ask         → { question }     : retrieve relevant chunks → LLM answer
+//   POST /ask         → { question, reasoning? } : retrieve relevant chunks → LLM answer
+//                        (reasoning: true or ?reasoning=true → DeepSeek-R1 thinks first; slower, opt-in)
 
 import { EMBED_MODEL, ingestText, cleanSource, parseTargetUrl, fetchReadable, checkIngestToken, isRateLimited } from "./ingest.js";
+import { wantsReasoning, reasoningAnswer } from "./reasoning.js";
 
 const LLM_MODEL = "@cf/meta/llama-3.1-8b-instruct";   // answering model (supports tool use)
 const RERANK_MODEL = "@cf/baai/bge-reranker-base";    // cross-encoder reranker (query↔chunk relevance)
@@ -99,8 +101,10 @@ async function handleAsk(request, env) {
     return json({ error: "Rate limit exceeded. Please try again later." }, 429);
   }
 
-  const { question, topK = 5 } = await request.json().catch(() => ({}));
+  const body = await request.json().catch(() => ({}));
+  const { question, topK = 5 } = body;
   if (!question) return json({ error: "Missing 'question' in body." }, 400);
+  const reasoning = wantsReasoning(body, new URL(request.url));
 
   // 1) Embed the question with the SAME model used at ingestion
   const { data } = await env.AI.run(EMBED_MODEL, { text: [question] });
@@ -159,10 +163,15 @@ async function handleAsk(request, env) {
     { role: "user", content: `Context:\n${context}\n\nQuestion: ${question}` },
   ];
 
-  const answer = await aiAnswer(env, messages);
+  // 5) Opt-in reasoning mode; if R1 fails or runs out of tokens, answer with the fast model instead.
+  const reasoned = reasoning ? await reasoningAnswer(env, messages) : null;
+  const answer = reasoned ? reasoned.answer : await aiAnswer(env, messages);
 
   return json({
     answer,
+    mode: reasoned ? "reasoning" : "fast",
+    ...(reasoned ? { reasoning: reasoned.reasoning } : {}),
+    ...(reasoning && !reasoned ? { fallback: true } : {}),
     sources: [...new Set(ordered.map((m) => m.metadata.source))],
     matches: ordered.map((m) => ({ score: m.score, rerankScore: m.rerankScore, source: m.metadata.source })),
   });
@@ -187,6 +196,10 @@ h1{font-size:24px;color:var(--ink);margin:6px 0}
 textarea{width:100%;background:#fff;border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:12px;font-size:15px;resize:vertical;min-height:58px;font-family:inherit}
 button.ask{margin-top:10px;background:var(--acc);color:#fff;border:none;border-radius:10px;padding:11px 22px;font-weight:600;cursor:pointer;font-size:15px}
 button.ask:hover{background:#1843b8}
+.rsn{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:13.5px;color:var(--mut);cursor:pointer}
+.why{margin-top:10px;font-size:13.5px}
+.why summary{cursor:pointer;color:var(--acc);font-weight:600}
+#whyTxt{white-space:pre-wrap;margin-top:8px;background:#f8fafc;border:1px solid var(--line);border-radius:10px;padding:12px;max-height:280px;overflow:auto;color:var(--body)}
 .out{margin-top:16px;background:#f8fafc;border:1px solid var(--line);border-radius:10px;padding:15px;min-height:46px;font-size:15px;color:var(--ink);white-space:pre-wrap}
 .foot{margin-top:20px;padding-top:15px;border-top:1px solid var(--line);color:var(--mut);font-size:13px}
 .foot a{color:var(--acc);text-decoration:none}
@@ -200,15 +213,17 @@ button.ask:hover{background:#1843b8}
   <p class="label" data-en="This demo is preloaded with a short profile. Select an example question:" data-es="Esta demostracion trae cargado un perfil breve. Selecciona una pregunta de ejemplo:">This demo is preloaded with a short profile. Select an example question:</p>
   <div class="chips" id="chips"></div>
   <textarea id="q"></textarea>
+  <label class="rsn"><input type="checkbox" id="rsn"> <span data-en="Reason step by step (slower, ~10-30 s)" data-es="Razonar paso a paso (mas lento, ~10-30 s)">Reason step by step (slower, ~10-30 s)</span></label>
   <button class="ask" onclick="ask()" data-en="Get answer" data-es="Obtener respuesta">Get answer</button>
   <div class="out" id="out" data-en="The answer will appear here, with its source document." data-es="La respuesta aparecera aqui, con su documento fuente.">The answer will appear here, with its source document.</div>
+  <details class="why" id="why" hidden><summary data-en="How it reasoned" data-es="Como razono">How it reasoned</summary><div id="whyTxt"></div></details>
   <p class="foot"><span data-en="Designed and built by Juan Berrio, Cloud &amp; Data Engineer. Source code:" data-es="Disenado y construido por Juan Berrio, Cloud &amp; Data Engineer. Codigo fuente:">Designed and built by Juan Berrio, Cloud &amp; Data Engineer. Source code:</span> <a href="https://github.com/juanberrio0399/serverless-rag-assistant" target="_blank">GitHub</a></p>
 </div>
 <script>
 var EX={en:["How many records does DataForge process?","What technologies does DataForge use?","How often does DataForge run?"],es:["Cuantos registros procesa DataForge?","Que tecnologias usa DataForge?","Cada cuanto se ejecuta DataForge?"]};
 function chips(l){var c=document.getElementById("chips");c.innerHTML="";EX[l].forEach(function(t){var b=document.createElement("span");b.className="chip";b.textContent=t;b.onclick=function(){document.getElementById("q").value=t};c.appendChild(b)})}
 function L(l){document.documentElement.lang=l;document.querySelectorAll("[data-en]").forEach(function(e){var v=e.getAttribute("data-"+l);if(v)e.textContent=v});document.getElementById("bEN").classList.toggle("on",l==="en");document.getElementById("bES").classList.toggle("on",l==="es");chips(l);document.getElementById("q").value=EX[l][0]}
-async function ask(){var q=document.getElementById("q").value.trim(),o=document.getElementById("out");if(!q)return;o.textContent="...";try{var r=await fetch("/ask",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({question:q})});var d=await r.json();o.textContent=(d.answer||d.error||"-")+(d.sources&&d.sources.length?"   ["+d.sources.join(", ")+"]":"")}catch(e){o.textContent="Error: "+e.message}}
+async function ask(){var q=document.getElementById("q").value.trim(),o=document.getElementById("out"),w=document.getElementById("why"),rs=document.getElementById("rsn").checked;if(!q)return;o.textContent=rs?"... (reasoning, ~10-30 s)":"...";w.hidden=true;try{var r=await fetch("/ask",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({question:q,reasoning:rs})});var d=await r.json();o.textContent=(d.answer||d.error||"-")+(d.sources&&d.sources.length?"   ["+d.sources.join(", ")+"]":"")+(d.fallback?"   (reasoning unavailable, fast answer)":"");if(d.reasoning){document.getElementById("whyTxt").textContent=d.reasoning;w.hidden=false}}catch(e){o.textContent="Error: "+e.message}}
 L("en");
 </script></body></html>`;
 

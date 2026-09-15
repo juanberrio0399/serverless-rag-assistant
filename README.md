@@ -42,7 +42,7 @@ extra storage) and over-retrieves candidates that a **cross-encoder reranker**
 
 ## Tech / skills demonstrated
 
-`Cloudflare Workers` · `Workers AI` · `Vectorize` · `R2` · `RAG` · `reranking (cross-encoder)` · `rate limiting` · `LLM integration` · `embeddings` · `Infrastructure as Code (wrangler)` · `serverless` · `CI/CD`
+`Cloudflare Workers` · `Workers AI` · `Vectorize` · `R2` · `RAG` · `reranking (cross-encoder)` · `reasoning models (DeepSeek-R1)` · `rate limiting` · `LLM integration` · `embeddings` · `Infrastructure as Code (wrangler)` · `serverless` · `CI/CD`
 
 ## Live demo
 
@@ -65,7 +65,23 @@ curl -X POST https://serverless-rag-assistant.tienvo.workers.dev/ingest-url \
 curl -X POST https://serverless-rag-assistant.tienvo.workers.dev/ask \
   -H "content-type: application/json" \
   -d '{"question":"..."}'
+
+# 2b) Reasoning mode (opt-in): DeepSeek-R1 thinks before answering and returns its reasoning
+curl -X POST "https://serverless-rag-assistant.tienvo.workers.dev/ask?reasoning=true" \
+  -H "content-type: application/json" \
+  -d '{"question":"..."}'
 ```
+
+**Two answering modes** — the response says which one ran (`mode`):
+
+| | `fast` (default) | `reasoning` (`"reasoning": true` or `?reasoning=true`) |
+|---|---|---|
+| Model | `llama-3.1-8b-instruct` | `deepseek-r1-distill-qwen-32b` |
+| Latency | ~1-3 s | ~10-30 s |
+| Best for | direct lookups | questions that combine several facts |
+| Extra output | — | `reasoning` (the model's step-by-step thinking) |
+
+Reasoning is opt-in because it is slower and costlier: in testing, one reasoning answer took ~9 s and used ~110 of the 10,000 free Workers AI neurons per day. If R1 fails or runs out of tokens, `/ask` still answers with the fast model and adds `fallback: true`.
 
 Ingestion endpoints are rate limited per IP, accept only public http(s) pages, and index at most 100 chunks (~80k characters) per request (`truncated: true` when a page is longer). Enable them with `wrangler secret put INGEST_TOKEN`; without the secret they answer 503.
 
