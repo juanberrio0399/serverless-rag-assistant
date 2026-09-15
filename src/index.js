@@ -17,15 +17,20 @@ const RERANK_MODEL = "@cf/baai/bge-reranker-base";    // cross-encoder reranker 
 const MIN_RERANK_SCORE = 0.4;                          // drop weakly-relevant chunks after reranking
 
 // aiAnswer — Workers AI (free) with a Groq fallback (free, GROQ_API_KEY Worker secret) for quota resilience.
+const TIME_QUESTION = /\b(time|date|today|now|hora|fecha|hoy|ahora)\b/i;
+
 async function aiAnswer(env, messages) {
-  const tools = [{
+  // Offer the clock tool only when the question is about the date or time: with tools always attached,
+  // llama-3.3 answers ordinary questions with "I don't know the function to call".
+  const question = messages.at(-1)?.content?.split("Question:").pop() ?? "";
+  const tools = TIME_QUESTION.test(question) ? [{
     name: "get_current_time",
     description: "Get the current date and time",
     parameters: { type: "object", properties: {}, required: [] }
-  }];
+  }] : undefined;
 
   try {
-    let response = await env.AI.run(LLM_MODEL, { messages, tools });
+    let response = await env.AI.run(LLM_MODEL, tools ? { messages, tools } : { messages });
     if (response.tool_calls && response.tool_calls.length > 0) {
       const toolCall = response.tool_calls[0];
       if (toolCall.name === "get_current_time") {

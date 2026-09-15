@@ -18,6 +18,7 @@ function env({ fastError, reasoningOutput, reasoningError } = {}) {
         }
         if (model === LLM_MODEL) {
           if (fastError) throw new Error(fastError);
+          calls.fastInputs = [...(calls.fastInputs || []), input];
           return { response: "Fast answer." };
         }
         throw new Error(`5028: ${model} was deprecated`);
@@ -44,6 +45,16 @@ describe("POST /ask fast model", () => {
     assert.equal(data.answer, "Fast answer.");
     assert.equal(data.mode, "fast");
     assert.ok(e.calls.includes(LLM_MODEL));
+  });
+
+  test("attaches the clock tool only to date or time questions", async () => {
+    const normal = env();
+    await worker.fetch(ask({ question: "What technologies does DataForge use?" }), normal);
+    assert.equal(normal.calls.fastInputs[0].tools, undefined);
+
+    const timeQ = env();
+    await worker.fetch(ask({ question: "What is the date today?" }), timeQ);
+    assert.equal(timeQ.calls.fastInputs[0].tools[0].name, "get_current_time");
   });
 
   test("answers with the reasoning model when the fast model fails", async () => {
