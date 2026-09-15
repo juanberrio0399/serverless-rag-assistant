@@ -86,6 +86,17 @@ Los endpoints de ingesta tienen rate limit por IP, solo aceptan páginas públic
 - **Trazabilidad de fuente** — cada respuesta indica de qué documento salió, con su puntaje de similitud.
 - **~$0 de infraestructura** — serverless, sin servidor ni base de datos que alojar.
 
+## Pruebas
+
+En CI corren dos suites en cada push y pull request:
+
+| Suite | Comando | Qué cubre |
+|---|---|---|
+| Unitarias | `npm run test:unit` | `node:test` con bindings falsos: fragmentación, validación de URL, lectura con Jina Reader, respaldos de modelo, modo razonamiento |
+| Runtime | `npm run test:workers` | Vitest dentro de **workerd** (`@cloudflare/vitest-plugin`) con los bindings de `wrangler.jsonc`: rutas, validación de `/ask`, autenticación de ingesta (401/503), el simulador local de rate limit (429) |
+
+`npm test` corre ambas. Workers AI y Vectorize no tienen simulador local, así que la suite de runtime usa `remoteBindings: false` y los simula con `vi.spyOn`: las pruebas nunca tocan una cuenta de Cloudflare ni necesitan credenciales.
+
 ---
 
 > Hecho por **Juan Berrio** — Cloud &amp; Data Engineer. Portafolio: [juanberrio0399.github.io](https://juanberrio0399.github.io)

@@ -91,6 +91,17 @@ Ingestion endpoints are rate limited per IP, accept only public http(s) pages, a
 - **Source tracking** — every answer returns which document it came from, plus similarity scores.
 - **~$0 infrastructure** — serverless, no server or database to host.
 
+## Tests
+
+Two suites run in CI on every push and pull request:
+
+| Suite | Command | What it covers |
+|---|---|---|
+| Unit | `npm run test:unit` | `node:test` with fake bindings: chunking, URL validation, Jina Reader parsing, model fallbacks, reasoning mode |
+| Runtime | `npm run test:workers` | Vitest inside **workerd** (`@cloudflare/vitest-plugin`) with the bindings from `wrangler.jsonc`: routing, `/ask` validation, ingestion auth (401/503), the local rate-limiter simulator (429) |
+
+`npm test` runs both. Workers AI and Vectorize have no local simulator, so the runtime suite sets `remoteBindings: false` and mocks them with `vi.spyOn`: tests never reach a Cloudflare account and need no credentials.
+
 ---
 
 > Built by **Juan Berrio** — Cloud &amp; Data Engineer. Portfolio: [juanberrio0399.github.io](https://juanberrio0399.github.io)

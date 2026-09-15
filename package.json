@@ -6,9 +6,13 @@
   "scripts": {
     "dev": "wrangler dev --remote",
     "deploy": "wrangler deploy",
-    "test": "node --test"
+    "test": "npm run test:unit && npm run test:workers",
+    "test:unit": "node --test",
+    "test:workers": "vitest run"
   },
   "devDependencies": {
-    "wrangler": "^4"
+    "@cloudflare/vitest-plugin": "1.1.10",
+    "vitest": "4.1.11",
+    "wrangler": "4.132.0"
   }
 }
