@@ -33,7 +33,12 @@ export function splitReasoning(raw, { hitLimit = false } = {}) {
 export async function reasoningAnswer(env, messages) {
   // DeepSeek recommends no system prompt for R1: every instruction goes in the user turn.
   const instructions = messages.filter((m) => m.role === "system").map((m) => m.content).join("\n");
-  const question = messages.filter((m) => m.role === "user").map((m) => m.content).join("\n\n");
+  // Earlier turns from conversation memory are written out as a transcript before the current question.
+  const turns = messages.filter((m) => (m.role === "user" || m.role === "assistant") && typeof m.content === "string");
+  const current = turns.filter((m) => m.role === "user").at(-1)?.content ?? "";
+  const earlier = turns.slice(0, turns.findLastIndex((m) => m.role === "user"))
+    .map((m) => `${m.role === "assistant" ? "Assistant" : "User"}: ${m.content}`).join("\n");
+  const question = earlier ? `Conversation so far:\n${earlier}\n\n${current}` : current;
   const prompt = [{
     role: "user",
     content: `${instructions}\nThink step by step before answering. After thinking, write only the final answer.\n\n${question}`,
