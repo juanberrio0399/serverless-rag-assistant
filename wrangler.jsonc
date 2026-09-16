@@ -31,10 +31,15 @@
 
   // Memoria de conversación de /ask en D1 (opcional) → env.DB. Guarda los últimos 5 turnos por
   // conversationId, sin IPs, con retención de 7 días (ver src/memory.js y migrations/).
-  // Sin database_id: créala una vez con `npx wrangler d1 create rag-memory`, pega aquí el
-  // "database_id" y aplica `npx wrangler d1 migrations apply rag-memory --remote` antes de desplegar.
+  // Base creada con `npx wrangler d1 create rag-memory`; las migraciones nuevas se aplican con
+  // `npx wrangler d1 migrations apply rag-memory --remote` antes de desplegar.
   "d1_databases": [
-    { "binding": "DB", "database_name": "rag-memory", "migrations_dir": "migrations" }
+    {
+      "binding": "DB",
+      "database_name": "rag-memory",
+      "database_id": "329c1268-a00f-47ba-bba2-c805a20a1c3b",
+      "migrations_dir": "migrations"
+    }
   ],
 
   // Ingesta durable de documentos grandes con Cloudflare Workflows → env.INGEST_WORKFLOW.
