@@ -21,6 +21,9 @@ import { resolveConversationId, loadHistory, saveTurn, retrievalQuery } from "./
 export const LLM_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
 const RERANK_MODEL = "@cf/baai/bge-reranker-base";    // cross-encoder reranker (query↔chunk relevance)
 const MIN_RERANK_SCORE = 0.4;                          // drop weakly-relevant chunks after reranking
+// Chunks now end on structural boundaries and average ~455 characters instead of ~730, so the
+// same number of chunks would give the model a third less context: retrieve a few more of them.
+const DEFAULT_TOP_K = 8;
 
 // aiAnswer — Workers AI (free) with a Groq fallback (free, GROQ_API_KEY Worker secret) for quota resilience.
 const TIME_QUESTION = /\b(time|date|today|now|hora|fecha|hoy|ahora)\b/i;
@@ -151,7 +154,7 @@ async function handleAsk(request, env, ctx) {
   }
 
   const body = await request.json().catch(() => ({}));
-  const { question, topK = 5 } = body;
+  const { question, topK = DEFAULT_TOP_K } = body;
   if (!question) return json({ error: "Missing 'question' in body." }, 400);
   const reasoning = wantsReasoning(body, new URL(request.url));
 

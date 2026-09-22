@@ -3,9 +3,12 @@
 // Jina Reader limit (~500k characters) in batches, and each batch is a step that is retried on its own.
 // Plain functions so they can be unit-tested with `node --test`; src/workflow.js wires them into steps.
 
-import { EMBED_MODEL, EMBED_BATCH, CHUNK_SIZE, MAX_READER_CHARS, chunkText, cleanSource, parseTargetUrl, readPage } from "./ingest.js";
+import { EMBED_MODEL, EMBED_BATCH, AVG_CHUNK_CHARS, MAX_READER_CHARS, chunkText, cleanSource, parseTargetUrl, readPage } from "./ingest.js";
 
-export const MAX_JOB_CHUNKS = Math.ceil(MAX_READER_CHARS / CHUNK_SIZE); // 625 chunks: 1 read + 13 embed + 13 upsert subrequests
+// Chunks end on structural boundaries, so they are shorter than the target size: the cap is
+// derived from the measured average (AVG_CHUNK_CHARS), not from the target, or a long document
+// would be truncated before the reader's limit. 1000 chunks: 1 read + 20 embed + 20 upsert subrequests.
+export const MAX_JOB_CHUNKS = Math.ceil(MAX_READER_CHARS / AVG_CHUNK_CHARS);
 export const MAX_JOB_TEXT_BYTES = 900 * 1024;  // Workflow params and step results are limited to 1 MiB
 export const JOB_ID_PATTERN = /^[A-Za-z0-9_][A-Za-z0-9_-]{0,99}$/;
 export const STEP_CONFIG = {
