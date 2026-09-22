@@ -11,7 +11,7 @@
 //
 // Entry point for wrangler is src/worker.js, which also exports the IngestWorkflow class.
 
-import { EMBED_MODEL, ingestText, cleanSource, parseTargetUrl, fetchReadable, checkIngestToken, isRateLimited } from "./ingest.js";
+import { EMBED_MODEL, ingestText, cleanSource, parseTargetUrl, readPage, checkIngestToken, isRateLimited } from "./ingest.js";
 import { parseJobRequest, jobView, JOB_ID_PATTERN } from "./ingest-jobs.js";
 import { wantsReasoning, reasoningAnswer } from "./reasoning.js";
 import { resolveConversationId, loadHistory, saveTurn, retrievalQuery } from "./memory.js";
@@ -97,13 +97,15 @@ async function handleIngestUrl(request, env) {
   const target = parseTargetUrl(body.url);
   if (target.error) return json({ error: target.error }, 400);
 
-  const page = await fetchReadable(target.url);
+  // The reader is rate limited per IP and Cloudflare egress IPs are shared, so fall back to
+  // fetching the page directly. JINA_API_KEY (optional secret) raises the reader's limit.
+  const page = await readPage(target.url, { apiKey: env.JINA_API_KEY });
   if (page.error) return json({ error: page.error }, page.status);
   if (!page.text.replace(/^# .*$/m, "").trim()) return json({ error: "The page has no readable text." }, 422);
 
   const src = cleanSource(body.source, target.url);
   const result = await ingestText(env, page.text, src);
-  return json({ ok: true, url: target.url, source: src, ...result, note: INDEXING_NOTE });
+  return json({ ok: true, url: target.url, source: src, read_with: page.via, ...result, note: INDEXING_NOTE });
 }
 
 // POST /ingest-jobs  — large documents: start a durable IngestWorkflow and return its id right away

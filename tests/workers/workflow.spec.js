@@ -73,7 +73,8 @@ describe("IngestWorkflow", () => {
     const [instance] = await introspector.get();
     await instance.waitForStatus("errored");
 
-    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    // Two calls, not one: the reader, then the direct fetch that also fails. Neither is retried.
+    expect(globalThis.fetch).toHaveBeenCalledTimes(2);
     expect(upserts).toEqual([]);
     const status = await (await exports.default.fetch(request("GET", statusUrl))).json();
     expect(status.status).toBe("errored");

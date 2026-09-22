@@ -85,6 +85,8 @@ curl -X POST "https://serverless-rag-assistant.tienvo.workers.dev/ask?reasoning=
 
 El razonamiento es opcional porque es más lento y costoso: en pruebas, una respuesta razonada tardó ~9 s y usó ~110 de las 10.000 neuronas gratis diarias de Workers AI. Si R1 falla o se queda sin tokens, `/ask` igual responde con el modelo rápido y agrega `fallback: true`.
 
+**Cómo se lee una URL:** primero con Jina Reader (mejor formato). Si el lector falla — limita por IP y las IPs de salida de Cloudflare son compartidas, así que `429 Per IP rate limit exceeded` es común — el Worker descarga la página él mismo y le quita el HTML. La respuesta indica qué camino se usó (`read_with: "reader" | "direct"`). El secreto opcional `JINA_API_KEY` (plan gratis) sube el límite del lector: `wrangler secret put JINA_API_KEY`.
+
 Los endpoints de ingesta tienen rate limit por IP, solo aceptan páginas públicas http(s) e indexan como máximo 100 fragmentos (~80 mil caracteres) por petición (`truncated: true` si la página es más larga). Se activan con `wrangler secret put INGEST_TOKEN`; sin el secreto responden 503.
 
 ### Documentos grandes (Cloudflare Workflows)

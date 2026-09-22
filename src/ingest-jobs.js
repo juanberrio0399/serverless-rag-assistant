@@ -3,7 +3,7 @@
 // Jina Reader limit (~500k characters) in batches, and each batch is a step that is retried on its own.
 // Plain functions so they can be unit-tested with `node --test`; src/workflow.js wires them into steps.
 
-import { EMBED_MODEL, EMBED_BATCH, CHUNK_SIZE, MAX_READER_CHARS, chunkText, cleanSource, parseTargetUrl, fetchReadable } from "./ingest.js";
+import { EMBED_MODEL, EMBED_BATCH, CHUNK_SIZE, MAX_READER_CHARS, chunkText, cleanSource, parseTargetUrl, readPage } from "./ingest.js";
 
 export const MAX_JOB_CHUNKS = Math.ceil(MAX_READER_CHARS / CHUNK_SIZE); // 625 chunks: 1 read + 13 embed + 13 upsert subrequests
 export const MAX_JOB_TEXT_BYTES = 900 * 1024;  // Workflow params and step results are limited to 1 MiB
@@ -41,9 +41,9 @@ export function parseJobRequest(body) {
 }
 
 // Step 1 for URL jobs. Errors marked `permanent` must not be retried (the page cannot be read).
-export async function readDocument(params, fetchImpl = fetch) {
+export async function readDocument(params, fetchImpl = fetch, { apiKey } = {}) {
   if (!params.url) return params.text;
-  const page = await fetchReadable(params.url, fetchImpl);
+  const page = await readPage(params.url, { fetchImpl, apiKey });
   if (page.error) throw Object.assign(new Error(page.error), { permanent: page.status === 422 });
   if (!page.text.replace(/^# .*$/m, "").trim()) {
     throw Object.assign(new Error("The page has no readable text."), { permanent: true });

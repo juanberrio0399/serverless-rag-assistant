@@ -10,6 +10,9 @@ export const MAX_READER_CHARS = 500_000; // cap on the text accepted from Jina R
 export const MAX_URL_LENGTH = 2048;
 export const READER_URL = "https://r.jina.ai/";
 export const READER_TIMEOUT_MS = 25_000;
+export const DIRECT_TIMEOUT_MS = 20_000;  // fallback fetch: the page itself, when the reader is unavailable
+export const MAX_DIRECT_BYTES = 3_000_000; // cap on the HTML downloaded by the fallback
+export const DIRECT_USER_AGENT = "Mozilla/5.0 (compatible; serverless-rag-assistant/1.0; +https://github.com/juanberrio0399/serverless-rag-assistant)";
 
 // Split raw text into fixed-size chunks (small enough for good retrieval).
 export function chunkText(text, size = CHUNK_SIZE) {
@@ -79,12 +82,18 @@ export function parseTargetUrl(raw) {
 
 // Fetch a page as Markdown through Jina Reader. The URL goes in the JSON body so its own
 // query string is preserved; the reader's header block (Title, Warning…) is reduced to a title.
-export async function fetchReadable(url, fetchImpl = fetch) {
+export async function fetchReadable(url, fetchImpl = fetch, { apiKey } = {}) {
   let res;
   try {
     res = await fetchImpl(READER_URL, {
       method: "POST",
-      headers: { accept: "text/plain", "content-type": "application/json" },
+      // A free Jina key (JINA_API_KEY secret) raises the per-IP limit; without it the reader
+      // often answers 429 because Cloudflare egress IPs are shared.
+      headers: {
+        accept: "text/plain",
+        "content-type": "application/json",
+        ...(apiKey ? { authorization: `Bearer ${apiKey}` } : {}),
+      },
       body: JSON.stringify({ url }),
       signal: AbortSignal.timeout(READER_TIMEOUT_MS),
     });
@@ -103,6 +112,65 @@ export async function fetchReadable(url, fetchImpl = fetch) {
   const title = (raw.slice(0, marker >= 0 ? marker : 0).match(/^Title:[ \t]*(.+)$/m) || [])[1];
   const text = `${title ? `# ${title.trim()}\n\n` : ""}${body.trim()}`.slice(0, MAX_READER_CHARS);
   return { text };
+}
+
+// Plain-text extraction for the fallback: drop the parts that never carry content, turn block
+// boundaries into newlines, remove the remaining tags and decode the handful of entities that matter.
+export function htmlToText(html) {
+  const title = (html.match(/<title[^>]*>([\s\S]*?)<\/title>/i) || [])[1];
+  const text = html
+    .replace(/<(script|style|noscript|template|svg|head)[^>]*>[\s\S]*?<\/\1>/gi, " ")
+    .replace(/<!--[\s\S]*?-->/g, " ")
+    .replace(/<\/(p|div|section|article|li|tr|h[1-6]|blockquote|pre)>/gi, "\n")
+    .replace(/<(br|hr)\s*\/?>/gi, "\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&#x([0-9a-f]+);/gi, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
+    .replace(/&#(\d+);/g, (_, dec) => String.fromCodePoint(Number(dec)))
+    .replace(/[^\S\n]+/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  return { title: title ? title.replace(/\s+/g, " ").trim() : "", text };
+}
+
+// Fallback when the reader fails: fetch the page directly and strip the HTML ourselves.
+export async function fetchDirect(url, fetchImpl = fetch) {
+  let res;
+  try {
+    res = await fetchImpl(url, {
+      headers: { accept: "text/html,text/plain;q=0.9,*/*;q=0.1", "user-agent": DIRECT_USER_AGENT },
+      redirect: "follow",
+      signal: AbortSignal.timeout(DIRECT_TIMEOUT_MS),
+    });
+  } catch (e) {
+    const timeout = e && (e.name === "TimeoutError" || e.name === "AbortError");
+    return { status: timeout ? 504 : 502, error: timeout ? "The page took too long to load." : "Could not reach the page." };
+  }
+  if (!res.ok) return { status: res.status === 404 || res.status === 410 ? 422 : 502, error: `The page answered ${res.status}.` };
+  const type = (res.headers.get("content-type") || "").toLowerCase();
+  if (!type.includes("text/html") && !type.includes("text/plain") && !type.includes("xml")) {
+    return { status: 415, error: `The page is not text (${type.split(";")[0] || "unknown type"}).` };
+  }
+  const raw = (await res.text().catch(() => "")).slice(0, MAX_DIRECT_BYTES);
+  const parsed = type.includes("text/plain") ? { title: "", text: raw.trim() } : htmlToText(raw);
+  return { text: `${parsed.title ? `# ${parsed.title}\n\n` : ""}${parsed.text}`.slice(0, MAX_READER_CHARS) };
+}
+
+// Read a page for ingestion: the reader first (best formatting), the page itself as a fallback.
+// Returns { text, via } or { status, error }.
+export async function readPage(url, { fetchImpl = fetch, apiKey } = {}) {
+  const read = await fetchReadable(url, fetchImpl, { apiKey });
+  if (!read.error) return { ...read, via: "reader" };
+
+  const direct = await fetchDirect(url, fetchImpl);
+  if (!direct.error) return { ...direct, via: "direct" };
+  // Both failed: keep the reader's status and say what the direct attempt saw.
+  return { status: read.status, error: `${read.error} Direct fetch also failed: ${direct.error}` };
 }
 
 // Ingestion is private: a Bearer token that matches the INGEST_TOKEN secret, compared in constant time.
