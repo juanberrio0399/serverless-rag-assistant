@@ -13,7 +13,7 @@ export class IngestWorkflow extends WorkflowEntrypoint {
     const text = params.url
       ? await step.do("read page", STEP_CONFIG, async () => {
           try {
-            return await readDocument(params);
+            return await readDocument(params, fetch, { apiKey: this.env?.JINA_API_KEY });
           } catch (e) {
             throw e.permanent ? new NonRetryableError(e.message) : e;
           }

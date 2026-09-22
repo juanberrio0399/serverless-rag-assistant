@@ -1,7 +1,7 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import worker from "../src/index.js";
-import { chunkText, ingestText, parseTargetUrl, fetchReadable, MAX_CHUNKS, EMBED_BATCH, CHUNK_SIZE, READER_URL } from "../src/ingest.js";
+import { chunkText, ingestText, parseTargetUrl, fetchReadable, htmlToText, fetchDirect, readPage, MAX_CHUNKS, EMBED_BATCH, CHUNK_SIZE, READER_URL } from "../src/ingest.js";
 
 const TOKEN = "test-token-123";
 
@@ -163,5 +163,93 @@ describe("POST /ingest and the rest of the Worker", () => {
     const res = await worker.fetch(new Request("https://rag.example/"), fakeEnv());
     assert.equal(res.status, 200);
     assert.match(await res.text(), /Serverless RAG Assistant/);
+  });
+});
+
+const html = (body, title = "Example") =>
+  new Response(`<html><head><title>${title}</title><style>a{}</style></head><body>${body}</body></html>`,
+    { headers: { "content-type": "text/html; charset=utf-8" } });
+
+describe("htmlToText", () => {
+  test("keeps the readable text and drops scripts, styles and tags", () => {
+    const out = htmlToText('<html><head><title> Docs  page </title><style>b{}</style></head><body><h1>Vectorize</h1><p>Stores &amp; searches vectors</p><script>evil()</script></body></html>');
+    assert.equal(out.title, "Docs page");
+    assert.equal(out.text, "Vectorize\n Stores & searches vectors");
+    assert.ok(!out.text.includes("evil"));
+  });
+  test("decodes numeric entities", () => {
+    assert.equal(htmlToText("<p>caf&#233; &#x26; t&eacute;</p>").text, "café & t&eacute;");
+  });
+});
+
+describe("fetchDirect", () => {
+  test("reads an HTML page and puts its title first", async () => {
+    const out = await fetchDirect("https://example.com", async () => html("<p>Hello</p>", "Example Domain"));
+    assert.equal(out.text, "# Example Domain\n\nHello");
+  });
+  test("sends a user agent and follows redirects", async () => {
+    let seen;
+    await fetchDirect("https://example.com", async (url, init) => { seen = init; return html("<p>x</p>"); });
+    assert.match(seen.headers["user-agent"], /serverless-rag-assistant/);
+    assert.equal(seen.redirect, "follow");
+  });
+  test("refuses binary content", async () => {
+    const out = await fetchDirect("https://example.com/a.pdf", async () => new Response("%PDF-1.7", { headers: { "content-type": "application/pdf" } }));
+    assert.equal(out.status, 415);
+    assert.match(out.error, /not text \(application\/pdf\)/);
+  });
+  test("maps a missing page to 422 and a server error to 502", async () => {
+    assert.equal((await fetchDirect("https://x.com", async () => new Response("nope", { status: 404 }))).status, 422);
+    assert.equal((await fetchDirect("https://x.com", async () => new Response("boom", { status: 500 }))).status, 502);
+  });
+});
+
+describe("readPage", () => {
+  test("uses the reader when it works", async () => {
+    const out = await readPage("https://example.com", { fetchImpl: async () => new Response(READER_PAGE) });
+    assert.equal(out.via, "reader");
+    assert.ok(out.text.startsWith("# Example Domain"));
+  });
+  test("falls back to the page itself when the reader is rate limited", async () => {
+    const out = await readPage("https://example.com", {
+      fetchImpl: async (url) => (String(url) === READER_URL
+        ? new Response("Per IP rate limit exceeded", { status: 429 })
+        : html("<p>Fallback body</p>", "Example Domain")),
+    });
+    assert.equal(out.via, "direct");
+    assert.equal(out.text, "# Example Domain\n\nFallback body");
+  });
+  test("sends the Jina key when one is configured", async () => {
+    let seen;
+    await readPage("https://example.com", { fetchImpl: async (url, init) => { seen = init; return new Response(READER_PAGE); }, apiKey: "k-123" });
+    assert.equal(seen.headers.authorization, "Bearer k-123");
+  });
+  test("reports both failures and keeps the reader status", async () => {
+    const out = await readPage("https://example.com", {
+      fetchImpl: async (url) => (String(url) === READER_URL
+        ? new Response("slow down", { status: 429 })
+        : new Response("boom", { status: 500 })),
+    });
+    assert.equal(out.status, 429);
+    assert.match(out.error, /Direct fetch also failed/);
+  });
+});
+
+describe("POST /ingest-url with the reader down", () => {
+  test("still ingests and says the page was read directly", async () => {
+    const env = fakeEnv();
+    const original = globalThis.fetch;
+    globalThis.fetch = async (url) => (String(url) === READER_URL
+      ? new Response("Per IP rate limit exceeded", { status: 429 })
+      : html("<p>" + "Vectorize is a vector database. ".repeat(40) + "</p>", "Vectorize"));
+    try {
+      const res = await worker.fetch(post("/ingest-url", { url: "https://developers.cloudflare.com/vectorize/" }), env);
+      const data = await res.json();
+      assert.equal(res.status, 200);
+      assert.equal(data.read_with, "direct");
+      assert.ok(data.chunks > 0);
+    } finally {
+      globalThis.fetch = original;
+    }
   });
 });
