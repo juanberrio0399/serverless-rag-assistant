@@ -69,8 +69,8 @@ describe("ingestText", () => {
     await assert.rejects(ingestText(env, "hello world", "doc"));
     assert.equal(env.calls.insert.length, 0);
   });
-  test("chunkText normalizes whitespace", () => {
-    assert.deepEqual(chunkText("  a \n\n b  ", 2), ["a ", "b"]);
+  test("chunkText normalizes whitespace and splits on blocks (see tests/chunker.test.js)", () => {
+    assert.deepEqual(chunkText("  a \n\n b  ", 2), ["a", "b"]);
   });
 });
 

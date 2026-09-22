@@ -1,9 +1,13 @@
 // Ingestion helpers shared by POST /ingest and POST /ingest-url.
 // Kept separate from the Worker entry so they can be unit-tested with `node --test`.
 
+import { chunkText, CHUNK_SIZE, AVG_CHUNK_CHARS } from "./chunker.js";
+
+// Structure-aware chunking lives in src/chunker.js; re-exported here so callers keep one import.
+export { chunkText, CHUNK_SIZE, AVG_CHUNK_CHARS };
+
 export const EMBED_MODEL = "@cf/baai/bge-base-en-v1.5"; // 768-dim embeddings
-export const CHUNK_SIZE = 800;          // characters per chunk
-export const MAX_CHUNKS = 100;          // cap per request (~80k chars) to bound AI and Vectorize usage
+export const MAX_CHUNKS = 100;          // cap per request (~50k chars at the measured average) to bound AI and Vectorize usage
 export const EMBED_BATCH = 50;          // texts per Workers AI embedding call
 export const INSERT_BATCH = 100;        // vectors per Vectorize insert (binding limit is 1000)
 export const MAX_READER_CHARS = 500_000; // cap on the text accepted from Jina Reader
@@ -13,16 +17,6 @@ export const READER_TIMEOUT_MS = 25_000;
 export const DIRECT_TIMEOUT_MS = 20_000;  // fallback fetch: the page itself, when the reader is unavailable
 export const MAX_DIRECT_BYTES = 3_000_000; // cap on the HTML downloaded by the fallback
 export const DIRECT_USER_AGENT = "Mozilla/5.0 (compatible; serverless-rag-assistant/1.0; +https://github.com/juanberrio0399/serverless-rag-assistant)";
-
-// Split raw text into fixed-size chunks (small enough for good retrieval).
-export function chunkText(text, size = CHUNK_SIZE) {
-  const clean = String(text).replace(/\s+/g, " ").trim();
-  const chunks = [];
-  for (let i = 0; i < clean.length; i += size) {
-    chunks.push(clean.slice(i, i + size));
-  }
-  return chunks;
-}
 
 // Chunk → embed in batches → insert in batches. All embeddings are computed before the
 // first insert, so an embedding failure never leaves a half-written document in the index.

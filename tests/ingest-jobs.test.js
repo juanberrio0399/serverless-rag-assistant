@@ -37,13 +37,13 @@ test("capBytes never splits a multi-byte character", () => {
 
 describe("planBatches", () => {
   test("indexes up to the job cap in embedding-sized batches", () => {
-    const plan = planBatches("x".repeat(CHUNK_SIZE * 700));
-    assert.equal(plan.totalChunks, 700);
+    const plan = planBatches("x".repeat(CHUNK_SIZE * (MAX_JOB_CHUNKS + 100)));
+    assert.equal(plan.totalChunks, MAX_JOB_CHUNKS + 100);
     assert.equal(plan.chunks, MAX_JOB_CHUNKS);
     assert.equal(plan.truncated, true);
     assert.equal(plan.batches.length, Math.ceil(MAX_JOB_CHUNKS / EMBED_BATCH));
-    assert.equal(plan.batches.at(-1).offset, 600);
-    assert.equal(plan.batches.at(-1).chunks.length, 25);
+    assert.equal(plan.batches.at(-1).offset, MAX_JOB_CHUNKS - EMBED_BATCH);
+    assert.equal(plan.batches.at(-1).chunks.length, EMBED_BATCH);
   });
 });
 
