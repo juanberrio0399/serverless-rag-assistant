@@ -2,6 +2,7 @@
 // Kept separate from the Worker entry so they can be unit-tested with `node --test`.
 
 import { chunkText, CHUNK_SIZE, AVG_CHUNK_CHARS } from "./chunker.js";
+import { sanitize } from "./guard.js";
 
 // Structure-aware chunking lives in src/chunker.js; re-exported here so callers keep one import.
 export { chunkText, CHUNK_SIZE, AVG_CHUNK_CHARS };
@@ -21,7 +22,11 @@ export const DIRECT_USER_AGENT = "Mozilla/5.0 (compatible; serverless-rag-assist
 // Chunk → embed in batches → insert in batches. All embeddings are computed before the
 // first insert, so an embedding failure never leaves a half-written document in the index.
 export async function ingestText(env, text, source) {
-  const all = chunkText(text);
+  // Clean the document before it is chunked: hidden carriers (HTML comments, zero-width and tag
+  // characters) and sentences that give the assistant orders are dropped here, so a poisoned page
+  // never reaches the index in the first place. See src/guard.js.
+  const { text: clean, removed } = sanitize(text);
+  const all = chunkText(clean);
   const chunks = all.slice(0, MAX_CHUNKS);
   const vectors = [];
   for (let i = 0; i < chunks.length; i += EMBED_BATCH) {
@@ -40,7 +45,12 @@ export async function ingestText(env, text, source) {
   for (let i = 0; i < records.length; i += INSERT_BATCH) {
     await env.VECTORIZE.insert(records.slice(i, i + INSERT_BATCH));
   }
-  return { chunks: chunks.length, totalChunks: all.length, truncated: all.length > chunks.length };
+  return {
+    chunks: chunks.length,
+    totalChunks: all.length,
+    truncated: all.length > chunks.length,
+    ...(Object.values(removed).some((n) => n > 0) ? { sanitized: removed } : {}),
+  };
 }
 
 export function cleanSource(source, fallback = "manual") {

@@ -36,6 +36,7 @@ export class IngestWorkflow extends WorkflowEntrypoint {
       chunks: stored,
       totalChunks: plan.totalChunks,
       truncated: plan.truncated,
+      ...(plan.sanitized ? { sanitized: plan.sanitized } : {}),
     };
   }
 }

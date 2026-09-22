@@ -4,6 +4,7 @@
 // Plain functions so they can be unit-tested with `node --test`; src/workflow.js wires them into steps.
 
 import { EMBED_MODEL, EMBED_BATCH, AVG_CHUNK_CHARS, MAX_READER_CHARS, chunkText, cleanSource, parseTargetUrl, readPage } from "./ingest.js";
+import { sanitize } from "./guard.js";
 
 // Chunks end on structural boundaries, so they are shorter than the target size: the cap is
 // derived from the measured average (AVG_CHUNK_CHARS), not from the target, or a long document
@@ -55,13 +56,21 @@ export async function readDocument(params, fetchImpl = fetch, { apiKey } = {}) {
 }
 
 export function planBatches(text) {
-  const all = chunkText(text);
+  // Same cleaning as POST /ingest: a poisoned page is stripped before it is chunked (src/guard.js).
+  const { text: clean, removed } = sanitize(text);
+  const all = chunkText(clean);
   const chunks = all.slice(0, MAX_JOB_CHUNKS);
   const batches = [];
   for (let offset = 0; offset < chunks.length; offset += EMBED_BATCH) {
     batches.push({ offset, chunks: chunks.slice(offset, offset + EMBED_BATCH) });
   }
-  return { batches, chunks: chunks.length, totalChunks: all.length, truncated: all.length > chunks.length };
+  return {
+    batches,
+    chunks: chunks.length,
+    totalChunks: all.length,
+    truncated: all.length > chunks.length,
+    ...(Object.values(removed).some((n) => n > 0) ? { sanitized: removed } : {}),
+  };
 }
 
 // One step per batch: embed, then upsert with ids derived from the job and chunk position, so a

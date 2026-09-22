@@ -15,6 +15,7 @@ import { EMBED_MODEL, ingestText, cleanSource, parseTargetUrl, readPage, checkIn
 import { parseJobRequest, jobView, JOB_ID_PATTERN } from "./ingest-jobs.js";
 import { wantsReasoning, reasoningAnswer } from "./reasoning.js";
 import { resolveConversationId, loadHistory, saveTurn, retrievalQuery } from "./memory.js";
+import { looksLikeInjection, buildContext, systemPrompt, leaksSystemPrompt, REFUSAL, INJECTION_REJECTED } from "./guard.js";
 
 // Answering model (supports tool use). llama-3.1-8b-instruct was deprecated on 2026-05-30 and every call failed,
 // which left the fast mode answering with an empty string.
@@ -156,6 +157,9 @@ async function handleAsk(request, env, ctx) {
   const body = await request.json().catch(() => ({}));
   const { question, topK = DEFAULT_TOP_K } = body;
   if (!question) return json({ error: "Missing 'question' in body." }, 400);
+  // 0a) Direct prompt injection: reject before spending the embedding, reranker and LLM calls
+  //     (~55 neurons per question). Detection is deterministic, see src/guard.js.
+  if (looksLikeInjection(question)) return json({ error: INJECTION_REJECTED }, 400);
   const reasoning = wantsReasoning(body, new URL(request.url));
 
   // 0b) Conversation memory (optional D1 binding): last turns of this conversation, oldest first.
@@ -207,21 +211,17 @@ async function handleAsk(request, env, ctx) {
     ordered = matches.slice(0, topK);
   }
 
-  // 3) Build the context block from the reranked chunks
-  const context = ordered.map((m, i) => `[${i + 1}] ${m.metadata.text}`).join("\n\n");
+  // 3) Build the context block from the reranked chunks. The chunks are sanitized again here —
+  //    the index still holds documents ingested before the ingestion-time cleaning existed — and
+  //    fenced, so the model can tell document text from the operator's instructions.
+  const context = buildContext(ordered.map((m) => m.metadata.text));
 
-  // 4) Prompt engineering: force the model to answer ONLY from the context
+  // 4) Prompt engineering: answer ONLY from the context, and never obey what the context says.
+  const system = systemPrompt({ hasHistory: history.length > 0 });
   const messages = [
-    {
-      role: "system",
-      content:
-        "You are a helpful assistant. Answer the question using ONLY the context provided. " +
-        "If the answer is not in the context, say you don't know — never make anything up. " +
-        "Be concise and reply in the same language as the question." +
-        (history.length ? " Use the earlier turns of the conversation only to understand what the question refers to." : ""),
-    },
+    { role: "system", content: system },
     ...history,
-    { role: "user", content: `Context:\n${context}\n\nQuestion: ${question}` },
+    { role: "user", content: `Context:\n${context.block}\n\nQuestion: ${question}` },
   ];
 
   // 5) Opt-in reasoning mode; if R1 fails or runs out of tokens, answer with the fast model instead.
@@ -236,6 +236,15 @@ async function handleAsk(request, env, ctx) {
     if (reasoned) { answer = reasoned.answer; rescued = true; }
   }
 
+  // 6b) Output check: if an injection got through anyway and the answer repeats the system prompt,
+  //     hand back a refusal instead. String comparison only, no second model call.
+  const sanitizedContext = Object.values(context.removed).some((n) => n > 0);
+  const guardNotes = sanitizedContext ? ["context-sanitized"] : [];
+  if (answer && leaksSystemPrompt(answer, system)) {
+    answer = REFUSAL;
+    guardNotes.push("answer-redacted");
+  }
+
   // 7) Remember this turn after responding (only answered turns are stored).
   if (memory && answer) {
     const saving = saveTurn(env.DB, memory.id, question, answer);
@@ -248,6 +257,7 @@ async function handleAsk(request, env, ctx) {
     mode: reasoned ? "reasoning" : "fast",
     ...(reasoned ? { reasoning: reasoned.reasoning } : {}),
     ...((reasoning && !reasoned) || rescued ? { fallback: true } : {}),
+    ...(guardNotes.length ? { guarded: guardNotes, ...(sanitizedContext ? { removedFromContext: context.removed } : {}) } : {}),
     ...(answer ? {} : { error: "No model returned an answer. Please try again in a moment." }),
     sources: [...new Set(ordered.map((m) => m.metadata.source))],
     matches: ordered.map((m) => ({ score: m.score, rerankScore: m.rerankScore, source: m.metadata.source })),
