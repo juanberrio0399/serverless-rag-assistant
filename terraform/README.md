@@ -1,32 +1,44 @@
-# Infrastructure as Code (Terraform)
+# Terraform — R2 bucket for source documents
 
-This folder manages the project's Cloudflare infrastructure **as code** with Terraform,
-instead of clicking around a dashboard. Editing a file here = changing the cloud.
+`main.tf` declares one resource: the `rag-source-docs` R2 bucket meant to hold the original files
+fed to the assistant.
 
-## What `main.tf` contains
+**This is not wired into the Worker.** `wrangler.jsonc` has no R2 binding and `src/` never reads or
+writes the bucket — the Worker keeps chunk text in Vectorize metadata and nothing else. The bucket
+exists so the storage layer is provisioned the same way the rest of the infrastructure is, ahead of
+the code that will use it.
+
+The rest of the project's infrastructure (Worker, Workers AI, Vectorize, D1, Workflows, rate
+limiting) is declared in `wrangler.jsonc`, not here. Two tools, because Wrangler is the only one
+that can bind Workers AI and Vectorize to a Worker, while R2 buckets are plain resources Terraform
+handles well.
+
+## What is in `main.tf`
 
 | Block | What it does |
 |---|---|
-| `terraform { required_providers ... }` | Declares which cloud provider to use (Cloudflare) and its version. |
-| `provider "cloudflare" {}` | The connection to Cloudflare. The API token is read from the `CLOUDFLARE_API_TOKEN` environment variable — **never hardcoded**. |
-| `variable "account_id"` | An input so the account ID isn't hardcoded either. |
-| `resource "cloudflare_r2_bucket" "rag_docs"` | The thing we want to exist: an R2 bucket to store the RAG source documents. |
-| `output "bucket_name"` | Prints a useful value after applying. |
+| `terraform { required_providers … }` | Pins the Cloudflare provider to v5.x and Terraform to 1.5+ |
+| `provider "cloudflare" {}` | Configured entirely from the `CLOUDFLARE_API_TOKEN` environment variable, so no credential is ever written to a file |
+| `variable "account_id"` | Supplied as `TF_VAR_account_id`, for the same reason |
+| `resource "cloudflare_r2_bucket" "rag_docs"` | The bucket, in `WNAM` (Western North America) |
+| `output "bucket_name"` | Prints the bucket name after apply |
 
-## How to use it
+## Running it
 
 ```bash
-export CLOUDFLARE_API_TOKEN="<your-token>"     # auth (env var, not in code)
-export TF_VAR_account_id="<your-account-id>"
+export CLOUDFLARE_API_TOKEN="<token>"     # auth, env var only
+export TF_VAR_account_id="<account id>"
 
 terraform init       # download the Cloudflare provider
-terraform validate   # check the config is correct (no credentials needed)
-terraform plan       # preview WHAT would change (creates nothing)
-terraform apply      # actually create/update the infrastructure
-terraform destroy    # tear it down
+terraform validate   # check the config; needs no credentials
+terraform plan       # preview, creates nothing
+terraform apply
+terraform destroy
 ```
 
-## Why this matters
+The token needs the **Workers R2 Storage: Edit** permission on the account. `terraform validate`
+passes without any credentials at all, which is what makes this folder safe to check in CI.
 
-Infrastructure as Code is **repeatable, version-controlled (git), and reviewable** — the standard
-for cloud/infrastructure roles. `terraform validate` on this config returns *"Success! The configuration is valid."*
+State is local and gitignored. There is no remote backend: one bucket, one operator, so the
+coordination a remote state buys is not worth its setup here. That changes the moment a second
+person runs `apply`.
