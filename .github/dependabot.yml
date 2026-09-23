@@ -1,0 +1,31 @@
+version: 2
+# Dependabot vigila dependencias y acciones: abre un PR agrupado por semana cuando hay
+# versión nueva o vulnerabilidad conocida. Gratis. Cada PR se revisa antes de mergear.
+# Las alertas de seguridad se activan aparte, en Settings del repo.
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: tuesday
+    groups:
+      github-actions:
+        patterns:
+          - '*'
+    commit-message:
+      prefix: ci
+    labels:
+      - dependencies
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: tuesday
+    groups:
+      npm:
+        patterns:
+          - '*'
+    commit-message:
+      prefix: deps
+    labels:
+      - dependencies
