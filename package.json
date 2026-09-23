@@ -11,8 +11,8 @@
     "test:workers": "vitest run"
   },
   "devDependencies": {
-    "@cloudflare/vitest-plugin": "1.1.10",
-    "vitest": "4.1.11",
-    "wrangler": "4.132.0"
+    "@cloudflare/vitest-plugin": "1.1.13",
+    "vitest": "5.0.1",
+    "wrangler": "4.135.0"
   }
 }
