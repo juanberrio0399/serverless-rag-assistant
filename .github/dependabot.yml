@@ -25,6 +25,23 @@ updates:
       npm:
         patterns:
           - '*'
+    # vitest se queda en 4.x a proposito, hasta que Cloudflare lo soporte.
+    # `@cloudflare/vitest-plugin` exige `vitest@^4.1.0` como peer, y lo sigue
+    # exigiendo en 1.3.5, su version mas nueva al 2026-10-02. Con vitest 5 el
+    # `npm ci` del CI muere con ERESOLVE antes de correr una sola prueba.
+    #
+    # Sin este ignore, Dependabot reabre el mismo salto imposible cada semana (fue
+    # el PR #73) y, al ir en el grupo, arrastra con el a las actualizaciones seguras
+    # que viajan en el mismo PR. Eso es lo que dejo una alerta de undici sin aplicar.
+    # Aqui pasa con mas facilidad que en otros repos porque vitest esta fijado en
+    # version EXACTA ("4.1.11"), asi que no hay rango que frene el mayor.
+    #
+    # Para quitarlo: comprobar con `npm view @cloudflare/vitest-plugin peerDependencies`
+    # que ya acepte vitest 5, y entonces subir los dos juntos en su propio PR.
+    ignore:
+      - dependency-name: vitest
+        update-types:
+          - version-update:semver-major
     commit-message:
       prefix: deps
     labels:
