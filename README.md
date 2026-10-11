@@ -1,5 +1,7 @@
 # Serverless RAG Assistant
 
+> Current status, what was done and what is left: **[PLAN.md](PLAN.md)**.
+
 Question answering grounded in your own documents, running entirely on Cloudflare's edge — no server, no database host, no container.
 
 [![Tests](https://github.com/juanberrio0399/serverless-rag-assistant/actions/workflows/test.yml/badge.svg)](https://github.com/juanberrio0399/serverless-rag-assistant/actions/workflows/test.yml)
