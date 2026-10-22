@@ -77,7 +77,8 @@ export function parseTargetUrl(raw) {
   if (
     host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal") ||
     PRIVATE_V4.some((re) => re.test(host)) ||
-    (isV6 && (host === "[::1]" || host === "[::]" || /^\[(fc|fd|fe8|fe9|fea|feb)/.test(host)))
+    // [::ffff:a.b.c.d] is normalized to [::ffff:7f00:1]: an IPv4 address inside IPv6 is refused too.
+    (isV6 && (host === "[::1]" || host === "[::]" || /^\[(fc|fd|fe8|fe9|fea|feb)/.test(host) || host.startsWith("[::ffff:")))
   ) {
     return { error: "Local and private network addresses are not allowed." };
   }
@@ -143,14 +144,27 @@ export function htmlToText(html) {
 }
 
 // Fallback when the reader fails: fetch the page directly and strip the HTML ourselves.
+const MAX_REDIRECTS = 5;
 export async function fetchDirect(url, fetchImpl = fetch) {
   let res;
   try {
-    res = await fetchImpl(url, {
-      headers: { accept: "text/html,text/plain;q=0.9,*/*;q=0.1", "user-agent": DIRECT_USER_AGENT },
-      redirect: "follow",
-      signal: AbortSignal.timeout(DIRECT_TIMEOUT_MS),
-    });
+    // Redirects by hand: with "follow", a public URL that redirects to 127.0.0.1 or a private
+    // address skipped parseTargetUrl entirely. Every hop is validated again.
+    let target = url;
+    for (let hop = 0; ; hop++) {
+      res = await fetchImpl(target, {
+        headers: { accept: "text/html,text/plain;q=0.9,*/*;q=0.1", "user-agent": DIRECT_USER_AGENT },
+        redirect: "manual",
+        signal: AbortSignal.timeout(DIRECT_TIMEOUT_MS),
+      });
+      if (res.status < 300 || res.status >= 400) break;
+      const loc = res.headers.get("location");
+      if (!loc) break;
+      if (hop >= MAX_REDIRECTS) return { status: 502, error: "Too many redirects." };
+      const next = parseTargetUrl(new URL(loc, target).toString());
+      if (next.error) return { status: 400, error: `Redirect blocked: ${next.error}` };
+      target = next.url;
+    }
   } catch (e) {
     const timeout = e && (e.name === "TimeoutError" || e.name === "AbortError");
     return { status: timeout ? 504 : 502, error: timeout ? "The page took too long to load." : "Could not reach the page." };

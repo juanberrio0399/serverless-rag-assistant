@@ -45,7 +45,7 @@ describe("parseTargetUrl", () => {
     for (const bad of ["", "not a url", "ftp://example.com/file", "javascript:alert(1)", "file:///etc/passwd",
       "https://user:pass@example.com", "http://localhost:8787", "http://api.localhost", "http://printer.local",
       "http://127.0.0.1", "http://10.0.0.5", "http://192.168.1.1", "http://172.20.0.1", "http://169.254.169.254/latest",
-      "http://[::1]/", "http://[fd00::1]/", `https://example.com/${"a".repeat(2100)}`]) {
+      "http://[::1]/", "http://[fd00::1]/", "http://[::ffff:127.0.0.1]/", "http://2130706433/", "http://0x7f.1/", `https://example.com/${"a".repeat(2100)}`]) {
       assert.ok(parseTargetUrl(bad).error, `should reject ${bad.slice(0, 40)}`);
     }
     assert.ok(parseTargetUrl(undefined).error);
@@ -187,11 +187,32 @@ describe("fetchDirect", () => {
     const out = await fetchDirect("https://example.com", async () => html("<p>Hello</p>", "Example Domain"));
     assert.equal(out.text, "# Example Domain\n\nHello");
   });
-  test("sends a user agent and follows redirects", async () => {
+  test("sends a user agent and handles redirects itself", async () => {
     let seen;
     await fetchDirect("https://example.com", async (url, init) => { seen = init; return html("<p>x</p>"); });
     assert.match(seen.headers["user-agent"], /serverless-rag-assistant/);
-    assert.equal(seen.redirect, "follow");
+    assert.equal(seen.redirect, "manual");
+  });
+  const redirect = (to) => new Response(null, { status: 302, headers: { location: to } });
+  test("follows a redirect to another public page", async () => {
+    const urls = [];
+    const out = await fetchDirect("https://example.com/old", async (url) => { urls.push(url); return urls.length === 1 ? redirect("/new") : html("<p>moved</p>"); });
+    assert.equal(out.text, "# Example\n\nmoved");
+    assert.deepEqual(urls, ["https://example.com/old", "https://example.com/new"]);
+  });
+  test("blocks a redirect to a private or metadata address (SSRF)", async () => {
+    for (const to of ["http://127.0.0.1/admin", "http://169.254.169.254/latest/meta-data", "http://10.0.0.5/", "http://[::ffff:127.0.0.1]/"]) {
+      let calls = 0;
+      const out = await fetchDirect("https://example.com", async () => { calls++; return redirect(to); });
+      assert.equal(out.status, 400, to);
+      assert.match(out.error, /Redirect blocked/);
+      assert.equal(calls, 1, "never fetches the private target");
+    }
+  });
+  test("gives up after too many redirects", async () => {
+    const out = await fetchDirect("https://example.com", async (url) => redirect(url + "x"));
+    assert.equal(out.status, 502);
+    assert.match(out.error, /Too many redirects/);
   });
   test("refuses binary content", async () => {
     const out = await fetchDirect("https://example.com/a.pdf", async () => new Response("%PDF-1.7", { headers: { "content-type": "application/pdf" } }));
