@@ -180,6 +180,12 @@ describe("htmlToText", () => {
   test("decodes numeric entities", () => {
     assert.equal(htmlToText("<p>caf&#233; &#x26; t&eacute;</p>").text, "café & t&eacute;");
   });
+  test("decodes each entity once, so escaped entities stay literal", () => {
+    assert.equal(htmlToText("<p>&amp;lt;b&amp;gt; and &amp;#233; and &AMP;</p>").text, "&lt;b&gt; and &#233; and &");
+  });
+  test("leaves out-of-range numeric entities as written instead of throwing", () => {
+    assert.equal(htmlToText("<p>x &#99999999; y</p>").text, "x &#99999999; y");
+  });
 });
 
 describe("fetchDirect", () => {

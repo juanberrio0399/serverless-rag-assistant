@@ -119,6 +119,17 @@ export async function fetchReadable(url, fetchImpl = fetch, { apiKey } = {}) {
   return { text };
 }
 
+// Entities are decoded in a single pass: decoding &amp; first would turn "&amp;lt;" into "<"
+// instead of the literal "&lt;". Out-of-range code points are left as written instead of throwing.
+const ENTITY = /&(nbsp|amp|lt|gt|quot|apos|#39|#x[0-9a-f]+|#\d+);/gi;
+const NAMED = { nbsp: " ", amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", "#39": "'" };
+function decodeEntity(match, name) {
+  const key = name.toLowerCase();
+  if (key in NAMED) return NAMED[key];
+  const code = key.startsWith("#x") ? parseInt(key.slice(2), 16) : Number(key.slice(1));
+  return code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : match;
+}
+
 // Plain-text extraction for the fallback: drop the parts that never carry content, turn block
 // boundaries into newlines, remove the remaining tags and decode the handful of entities that matter.
 export function htmlToText(html) {
@@ -129,14 +140,7 @@ export function htmlToText(html) {
     .replace(/<\/(p|div|section|article|li|tr|h[1-6]|blockquote|pre)>/gi, "\n")
     .replace(/<(br|hr)\s*\/?>/gi, "\n")
     .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;/gi, " ")
-    .replace(/&amp;/gi, "&")
-    .replace(/&lt;/gi, "<")
-    .replace(/&gt;/gi, ">")
-    .replace(/&quot;/gi, '"')
-    .replace(/&#39;|&apos;/gi, "'")
-    .replace(/&#x([0-9a-f]+);/gi, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
-    .replace(/&#(\d+);/g, (_, dec) => String.fromCodePoint(Number(dec)))
+    .replace(ENTITY, decodeEntity)
     .replace(/[^\S\n]+/g, " ")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
