@@ -57,6 +57,8 @@ La fragmentación es estructural, no de tamaño fijo. El texto se parte en títu
 
 La lista de endpoints, los dos modos de respuesta, las cuatro capas contra inyección de prompts con sus resultados medidos, la memoria de conversación, ejemplos de uso de la API, las decisiones de diseño y la guía de operación están en **[docs/reference.es.md](docs/reference.es.md)**.
 
+Historias de usuario, flujos y datos: [docs/PRODUCTO.md](docs/PRODUCTO.md).
+
 ## Con qué se conecta
 
 | Repo o sistema | Cómo |
@@ -118,7 +120,7 @@ Secretos, solo por nombre — ninguno va en `wrangler.jsonc`:
 | `terraform/` | El bucket R2 para los documentos originales, gestionado con Terraform. Todavía no conectado al Worker |
 | `wrangler.jsonc` | Todos los bindings que usa el Worker. Cambiar este archivo es cambiar la infraestructura |
 | `.github/workflows/` | `test.yml` (las dos suites) y `codeql.yml` (SAST) |
-| `docs/` | Referencia (API, defensas, decisiones, operación) y los banners |
+| `docs/` | Referencia (API, defensas, decisiones, operación), documento de producto (historias, flujos, datos) y los banners |
 
 ## Estado
 
