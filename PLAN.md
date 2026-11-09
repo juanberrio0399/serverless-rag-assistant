@@ -1,6 +1,6 @@
 # Plan — Serverless RAG Assistant
 
-Updated: 2026-10-11 · Status: **live** at <https://serverless-rag-assistant.tienvo.workers.dev>
+Updated: 2026-11-09 · Status: **live** at <https://serverless-rag-assistant.tienvo.workers.dev>
 
 How it works is in the [README](README.md). This file says where the project stands and what comes next.
 
@@ -47,14 +47,15 @@ Question answering grounded in your own documents, running entirely on Cloudflar
 ## What's left
 
 1. **#74: no AI Gateway.** `/ask` makes up to 3 Workers AI calls per question, with no cache and no observability. Highest value next step.
-2. #30: semantic cache with Vectorize + KV (pairs with #74).
-3. #48: RAG observability (Langfuse).
-4. #49: interactive API docs (OpenAPI with Scalar).
+2. #80 / #84: stream answers over SSE.
+3. #81: metadata filtering in Vectorize (for example by `source`).
+4. #99: automatic faithfulness checks.
 5. #50: GitHub discoverability and social preview.
-6. Dependabot #78 (npm group) is open.
+
+User stories, flows and data: [docs/PRODUCT.md](docs/PRODUCT.md).
 
 ## Known traps
 
-- **vitest 5 is blocked**: `@cloudflare/vitest-plugin` (1.3.5, latest) requires `vitest@^4`. `dependabot.yml` ignores the major on purpose; remove that once Cloudflare ships support.
+- **vitest 5 used to be blocked**: `@cloudflare/vitest-plugin` required `vitest@^4`. Version 1.4.11 (the one installed) accepts `^4.1.0 || ^5.0.0`, so the major-version ignore in `dependabot.yml` can now be removed.
 - **Jina Reader rate-limits**; the direct-fetch fallback strips HTML itself.
 - **The deprecated answering model once returned blank answers**; the code now never returns an empty answer.

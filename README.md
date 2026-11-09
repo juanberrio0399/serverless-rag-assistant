@@ -57,6 +57,8 @@ Chunking is structural, not fixed-size. The text is split into headings, paragra
 
 The endpoint list, the two answering modes, the four prompt-injection layers with their measured results, the conversation memory, API examples, design decisions and the runbook are in **[docs/reference.md](docs/reference.md)**.
 
+User stories, flows and data: [docs/PRODUCT.md](docs/PRODUCT.md).
+
 ## What it connects to
 
 | Repo or system | How |
@@ -118,7 +120,7 @@ Secrets, by name only — none of them belong in `wrangler.jsonc`:
 | `terraform/` | The R2 bucket for original documents, managed with Terraform. Not wired into the Worker yet |
 | `wrangler.jsonc` | Every binding the Worker uses. Changing this file changes the infrastructure |
 | `.github/workflows/` | `test.yml` (both suites) and `codeql.yml` (SAST) |
-| `docs/` | Reference (API, defences, decisions, operation) and the banners |
+| `docs/` | Reference (API, defences, decisions, operation), product doc (user stories, flows, data) and the banners |
 
 ## Status
 
