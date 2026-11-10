@@ -130,6 +130,10 @@ Still half-done: `terraform/` provisions an R2 bucket the Worker doesn't use, de
 
 Next, from the open issues: [#74 AI Gateway](https://github.com/juanberrio0399/serverless-rag-assistant/issues/74) (cache and per-model observability for the up-to-three model calls per question), [#80 streaming answers over SSE](https://github.com/juanberrio0399/serverless-rag-assistant/issues/80) and [#81 metadata filtering in Vectorize](https://github.com/juanberrio0399/serverless-rag-assistant/issues/81). More detail in [PLAN.md](PLAN.md).
 
+## Maintenance
+
+Dependencies are kept current by Dependabot, which I set up in [`.github/dependabot.yml`](.github/dependabot.yml). Every PR it opens is assigned to me with the `mantenimiento-automatico` label, it only gets merged if the tests pass, and I review major version bumps by hand.
+
 ## License
 
 [MIT](LICENSE) · Juan Berrio · [juanberrio0399.github.io](https://juanberrio0399.github.io)

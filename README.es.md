@@ -130,6 +130,10 @@ A medio hacer: `terraform/` aprovisiona un bucket R2 que el Worker no usa, los d
 
 Lo siguiente, de los issues abiertos: [#74 AI Gateway](https://github.com/juanberrio0399/serverless-rag-assistant/issues/74) (caché y observabilidad por modelo para las hasta tres llamadas por pregunta), [#80 respuestas en streaming por SSE](https://github.com/juanberrio0399/serverless-rag-assistant/issues/80) y [#81 filtrado por metadatos en Vectorize](https://github.com/juanberrio0399/serverless-rag-assistant/issues/81). Más detalle en [PLAN.md](PLAN.md) (en inglés).
 
+## Mantenimiento
+
+Las dependencias las mantiene al día Dependabot, que configuré yo en [`.github/dependabot.yml`](.github/dependabot.yml). Cada PR que abre me lo asigna a mí con la etiqueta `mantenimiento-automatico`, solo entra si pasan las pruebas y los cambios de versión mayor los reviso a mano.
+
 ## Licencia
 
 [MIT](LICENSE) · Juan Berrio · [juanberrio0399.github.io](https://juanberrio0399.github.io)
