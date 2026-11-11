@@ -1,0 +1,71 @@
+name: Deploy
+
+# Publica el Worker en Cloudflare cada vez que entra algo a main, solo si las pruebas pasan.
+# Necesita dos secretos del repo (Settings → Secrets and variables → Actions):
+#   CLOUDFLARE_API_TOKEN   token creado con la plantilla "Edit Cloudflare Workers"
+#                          + permisos de cuenta "D1: Edit" y "Vectorize: Edit".
+#   CLOUDFLARE_ACCOUNT_ID  id de la cuenta de Cloudflare.
+# Sin el token el job avisa y no publica (queda en verde para no bloquear main).
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - run: npm run test:unit
+      - run: npm run test:workers
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Revisar secretos
+        id: secretos
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::warning::Faltan CLOUDFLARE_API_TOKEN o CLOUDFLARE_ACCOUNT_ID: no se publica."
+            echo "listo=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "listo=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.secretos.outputs.listo == 'true'
+        uses: actions/checkout@v7
+      - if: steps.secretos.outputs.listo == 'true'
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+      - if: steps.secretos.outputs.listo == 'true'
+        run: npm ci
+      - name: Migraciones de D1 (memoria de conversación)
+        if: steps.secretos.outputs.listo == 'true'
+        run: npx wrangler d1 migrations apply rag-memory --remote
+      - name: Publicar el Worker
+        if: steps.secretos.outputs.listo == 'true'
+        run: npx wrangler deploy
+      - name: Comprobar que responde
+        if: steps.secretos.outputs.listo == 'true'
+        run: |
+          sleep 5
+          curl -fsS https://serverless-rag-assistant.tienvo.workers.dev/ | grep -q "<title>Serverless RAG Assistant</title>"
