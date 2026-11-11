@@ -82,6 +82,8 @@ npm run deploy           # wrangler deploy
 
 Neither test suite touches a Cloudflare account or needs credentials.
 
+Every push to `main` runs the tests and then deploys (`.github/workflows/deploy.yml`, needs the `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` repo secrets). D1 migrations are applied first.
+
 First deploy, once per account:
 
 ```bash
@@ -126,7 +128,7 @@ Secrets, by name only — none of them belong in `wrangler.jsonc`:
 
 Live at <https://serverless-rag-assistant.tienvo.workers.dev>. Both ingestion paths, reranked retrieval, both answering modes with fallbacks, the four injection layers, D1 memory, per-IP rate limiting, the bilingual demo page and both test suites in CI work today.
 
-Still half-done: `terraform/` provisions an R2 bucket the Worker doesn't use, deploys are a local `wrangler deploy` (so the live Worker and `main` can drift), and the `database_id` in `wrangler.jsonc` belongs to my account, so a fork has to replace it.
+Still half-done: `terraform/` provisions an R2 bucket the Worker doesn't use, and the `database_id` in `wrangler.jsonc` belongs to my account, so a fork has to replace it.
 
 Next, from the open issues: [#74 AI Gateway](https://github.com/juanberrio0399/serverless-rag-assistant/issues/74) (cache and per-model observability for the up-to-three model calls per question), [#80 streaming answers over SSE](https://github.com/juanberrio0399/serverless-rag-assistant/issues/80) and [#81 metadata filtering in Vectorize](https://github.com/juanberrio0399/serverless-rag-assistant/issues/81). More detail in [PLAN.md](PLAN.md).
 

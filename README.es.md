@@ -82,6 +82,8 @@ npm run deploy           # wrangler deploy
 
 Ninguna de las dos suites toca una cuenta de Cloudflare ni necesita credenciales.
 
+Cada push a `main` corre las pruebas y luego publica (`.github/workflows/deploy.yml`, necesita los secretos `CLOUDFLARE_API_TOKEN` y `CLOUDFLARE_ACCOUNT_ID` del repo). Antes aplica las migraciones de D1.
+
 Primer despliegue, una vez por cuenta:
 
 ```bash
@@ -126,7 +128,7 @@ Secretos, solo por nombre — ninguno va en `wrangler.jsonc`:
 
 En vivo en <https://serverless-rag-assistant.tienvo.workers.dev>. Hoy funcionan las dos rutas de ingesta, la recuperación con rerank, los dos modos de respuesta con respaldo, las cuatro capas contra inyección, la memoria en D1, el límite por IP, la página demo bilingüe y las dos suites de pruebas en CI.
 
-A medio hacer: `terraform/` aprovisiona un bucket R2 que el Worker no usa, los despliegues son un `wrangler deploy` local (así que el Worker en vivo y `main` pueden desalinearse) y el `database_id` de `wrangler.jsonc` es de mi cuenta, así que un fork tiene que cambiarlo.
+A medio hacer: `terraform/` aprovisiona un bucket R2 que el Worker no usa, y el `database_id` de `wrangler.jsonc` es de mi cuenta, así que un fork tiene que cambiarlo.
 
 Lo siguiente, de los issues abiertos: [#74 AI Gateway](https://github.com/juanberrio0399/serverless-rag-assistant/issues/74) (caché y observabilidad por modelo para las hasta tres llamadas por pregunta), [#80 respuestas en streaming por SSE](https://github.com/juanberrio0399/serverless-rag-assistant/issues/80) y [#81 filtrado por metadatos en Vectorize](https://github.com/juanberrio0399/serverless-rag-assistant/issues/81). Más detalle en [PLAN.md](PLAN.md) (en inglés).
 
