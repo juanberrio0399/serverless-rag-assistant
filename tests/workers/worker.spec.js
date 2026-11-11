@@ -36,7 +36,11 @@ describe("demo page", () => {
     const res = await exports.default.fetch("https://rag.example/");
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toMatch(/text\/html/);
-    expect(await res.text()).toContain("<title>Serverless RAG Assistant</title>");
+    const html = await res.text();
+    expect(html).toContain("<title>Serverless RAG Assistant</title>");
+    // link preview when the URL is shared (LinkedIn, X, WhatsApp)
+    expect(html).toContain('property="og:title"');
+    expect(html).toContain('property="og:image"');
   });
 
   it("falls back to the demo page for unknown routes and non-POST methods", async () => {

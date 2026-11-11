@@ -264,7 +264,7 @@ async function handleAsk(request, env, ctx) {
   });
 }
 
-const INDEX_HTML = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Serverless RAG Assistant</title>
+const INDEX_HTML = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Serverless RAG Assistant</title><meta name="description" content="Ask questions about your own documents. Every answer cites its source, and it says it does not know when the answer is not there. Runs on Cloudflare Workers."><meta property="og:type" content="website"><meta property="og:title" content="Serverless RAG Assistant"><meta property="og:description" content="Ask questions about your own documents. Every answer cites its source, and it says it does not know when the answer is not there. Runs on Cloudflare Workers."><meta property="og:image" content="https://raw.githubusercontent.com/juanberrio0399/serverless-rag-assistant/main/docs/og.png"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="627"><meta name="twitter:card" content="summary_large_image">
 <style>
 :root{--bg:#f5f7fa;--card:#ffffff;--ink:#0f172a;--body:#334155;--mut:#64748b;--line:#e6eaf0;--acc:#1d4ed8;--soft:#eef3ff}
 *{box-sizing:border-box}
