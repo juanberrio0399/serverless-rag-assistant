@@ -16,6 +16,8 @@ I built it as a single Worker to see how far the Cloudflare free tier goes (10,0
 
 Two paths share the same index. Ingestion is private (Bearer token); asking is public and rate limited.
 
+<p align="center"><img src="docs/flow.svg" alt="Animated overview of the flow" width="100%"></p>
+
 ```mermaid
 flowchart TD
     subgraph ingest["Ingestion - private, Bearer INGEST_TOKEN"]
