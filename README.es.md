@@ -16,6 +16,8 @@ Lo armé como un solo Worker para ver hasta dónde da el plan gratuito de Cloudf
 
 Dos caminos comparten el mismo índice. La ingesta es privada (token Bearer); preguntar es público y con límite de peticiones.
 
+<p align="center"><img src="docs/flow.es.svg" alt="Vista animada del flujo" width="100%"></p>
+
 ```mermaid
 flowchart TD
     subgraph ingesta["Ingesta - privada, Bearer INGEST_TOKEN"]
@@ -136,4 +138,4 @@ Las dependencias las mantiene al día Dependabot, que configuré yo en [`.github
 
 ## Licencia
 
-[MIT](LICENSE) · Juan Berrio · [juanberrio0399.github.io](https://juanberrio0399.github.io)
+<img src="docs/wolf.webp" width="28" height="28" alt="" align="absmiddle"> [MIT](LICENSE) · Juan Berrio · [juanberrio0399.github.io](https://juanberrio0399.github.io)
